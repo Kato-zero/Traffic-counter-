@@ -1,12 +1,13 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Traffic"><meta name="theme-color" content="#f2f2f7"><title>Traffic Counter</title><style>
-:root{--bg:#f2f2f7;--card:#ffffff;--text:#000000;--muted:#8e8e93;--blue:#007aff;--red:#ff3b30;--sep:rgba(60,60,67,.18);--fill:#e9e9ef;--navbg:rgba(249,249,249,.88);color-scheme:light}
-@media(prefers-color-scheme:dark){:root{--bg:#000000;--card:#1c1c1e;--text:#ffffff;--muted:#8e8e93;--blue:#0a84ff;--red:#ff453a;--sep:rgba(84,84,88,.65);--fill:#2c2c2e;--navbg:rgba(28,28,30,.88);color-scheme:dark}}
+:root{--bg:#f2f2f7;--card:#ffffff;--text:#000000;--muted:#8e8e93;--blue:#007aff;--red:#ff3b30;--sep:rgba(60,60,67,.18);--fill:#e9e9ef;--navbg:rgba(249,249,249,.92);color-scheme:light}
+@media(prefers-color-scheme:dark){:root{--bg:#000000;--card:#1c1c1e;--text:#ffffff;--muted:#8e8e93;--blue:#0a84ff;--red:#ff453a;--sep:rgba(84,84,88,.65);--fill:#2c2c2e;--navbg:rgba(28,28,30,.92);color-scheme:dark}}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 body{margin:0;background:var(--bg);color:var(--text);font:17px -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;-webkit-font-smoothing:antialiased;padding-bottom:calc(84px + env(safe-area-inset-bottom))}
-.nav{position:sticky;top:0;z-index:10;background:var(--navbg);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);padding:calc(env(safe-area-inset-top) + 12px) 16px 10px;border-bottom:.5px solid var(--sep)}
-.nav h1{font-size:34px;font-weight:700;margin:0;letter-spacing:.37px;line-height:1.1}
+.nav{position:sticky;top:0;z-index:10;background:var(--navbg);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);padding:calc(env(safe-area-inset-top) + 10px) 16px 8px;border-bottom:.5px solid var(--sep)}
+.nav h1{font-size:28px;font-weight:700;margin:0;letter-spacing:.37px;line-height:1.1}
 .nav p{margin:2px 0 0;font-size:13px;color:var(--muted)}
-#syncMsg{display:block;font-size:13px;color:var(--muted);margin-top:4px;min-height:16px}
+#syncMsg{display:block;font-size:12px;color:var(--muted);margin-top:2px;min-height:14px}
+.nav .tabs{margin:8px 0 0;background:var(--fill)}
 main{max-width:720px;margin:0 auto;padding:12px 16px}
 h2{font-size:22px;font-weight:700;margin:4px 0 10px}
 h3{font-size:17px;font-weight:600;margin:16px 0 8px}
@@ -66,10 +67,9 @@ details.dir{margin-left:6px}
 @media(min-width:750px){.cards{grid-template-columns:repeat(4,minmax(0,1fr))}}
 @media print{.no-print,.tabs,.cards,.tabbar,.nav .muted{display:none!important}body{background:#fff;color:#000;padding:0}.nav{position:static;background:#fff;border:0}.panel,section{box-shadow:none;border:1px solid #ddd}.scroll{overflow:visible;margin:0}input,select{border:0}details{display:block}details>*{display:block}}
 </style></head><body>
-<header class="nav"><h1>Traffic Counter</h1><p>Counter and admin · shared through Supabase</p><span id="syncMsg"></span></header>
+<header class="nav"><h1>Traffic Counter</h1><p>Counter and admin · shared through Supabase</p><nav class="tabs no-print" id="tabs" aria-label="Direction pages"></nav><span id="syncMsg"></span></header>
 <main>
 <div id="viewCount">
-<nav class="tabs no-print" id="tabs" aria-label="Direction pages"></nav>
 <section><h2 id="heading"></h2>
 <div class="fields"><label>Direction / approach name<input id="name"></label><label>Location / station<input id="location"></label><label>Observer<input id="observer"></label><label>Survey date<input type="date" id="date"></label></div>
 <div class="actions no-print"><button id="start" class="primary">Start</button><button id="pause">Pause</button><button id="undo">Undo last</button><button id="finish" class="primary">Finish</button><button id="resetCounts" class="danger">Reset counts</button><button id="reset" class="danger">Reset all</button></div>
@@ -376,6 +376,7 @@ $('lock').onclick=lockAdmin;
 /* ================= VIEW SWITCH ================= */
 function setView(v){
   $('viewCount').hidden=v!=='c';$('viewAdmin').hidden=v!=='a';
+  $('tabs').hidden=v!=='c';
   $('vCount').classList.toggle('vsel',v==='c');$('vAdmin').classList.toggle('vsel',v==='a');
   window.scrollTo({top:0});
   if(v==='a'){showAdmin();if(adminUnlocked)pull()}

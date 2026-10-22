@@ -1,91 +1,106 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Traffic Counter and Admin</title><style>
-*{box-sizing:border-box}
-body{margin:0;background:#eff4f9;color:#18324c;font:16px system-ui,sans-serif}
-header{background:#143b60;color:white;padding:20px}
-h1{font-size:24px;margin:0}
-header p{margin:4px 0 0;font-size:13px;opacity:.85}
-.views{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:12px}
-.views button{background:transparent;color:white;border-color:#6d8fb3}
-.views .vsel{background:#fff!important;color:#143b60!important;border-color:#fff}
-#syncMsg{font-size:13px;opacity:.9;margin-left:6px}
-main{max-width:1280px;margin:auto;padding:12px}
-h2{font-size:20px}
-h3{font-size:16px;color:#143b60;margin:16px 0 8px}
-.panel,section{padding:16px;background:white;border-radius:12px;margin:12px 0;box-shadow:0 1px 2px rgba(0,0,0,.06)}
-.tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;position:sticky;top:0;z-index:5;background:#eff4f9;padding:8px 0}
-.tabs button{padding:12px 3px;overflow-wrap:anywhere}
-.selected{background:#146ab1!important;color:white!important}
-button{font:inherit;border:1px solid #bfd0df;background:#e7f0f9;color:#173b5e;border-radius:8px;padding:12px;cursor:pointer;touch-action:manipulation}
-button:disabled{opacity:.4;cursor:default}
-.primary{background:#146ab1;color:white;border-color:#146ab1}
-.danger{background:#ffe8e8;color:#952323;border-color:#952323}
-input,select{font:inherit;width:100%;padding:10px;margin-top:5px;border:1px solid #b9cbdc;border-radius:6px}
-label{font-size:13px}
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Traffic"><meta name="theme-color" content="#f2f2f7"><title>Traffic Counter</title><style>
+:root{--bg:#f2f2f7;--card:#ffffff;--text:#000000;--muted:#8e8e93;--blue:#007aff;--red:#ff3b30;--sep:rgba(60,60,67,.18);--fill:#e9e9ef;--navbg:rgba(249,249,249,.88);color-scheme:light}
+@media(prefers-color-scheme:dark){:root{--bg:#000000;--card:#1c1c1e;--text:#ffffff;--muted:#8e8e93;--blue:#0a84ff;--red:#ff453a;--sep:rgba(84,84,88,.65);--fill:#2c2c2e;--navbg:rgba(28,28,30,.88);color-scheme:dark}}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:var(--bg);color:var(--text);font:17px -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;-webkit-font-smoothing:antialiased;padding-bottom:calc(84px + env(safe-area-inset-bottom))}
+.nav{position:sticky;top:0;z-index:10;background:var(--navbg);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);padding:calc(env(safe-area-inset-top) + 12px) 16px 10px;border-bottom:.5px solid var(--sep)}
+.nav h1{font-size:34px;font-weight:700;margin:0;letter-spacing:.37px;line-height:1.1}
+.nav p{margin:2px 0 0;font-size:13px;color:var(--muted)}
+#syncMsg{display:block;font-size:13px;color:var(--muted);margin-top:4px;min-height:16px}
+main{max-width:720px;margin:0 auto;padding:12px 16px}
+h2{font-size:22px;font-weight:700;margin:4px 0 10px}
+h3{font-size:17px;font-weight:600;margin:16px 0 8px}
+.panel,section{background:var(--card);border-radius:14px;padding:16px;margin:0 0 12px}
+.tabs{display:flex;background:var(--fill);border-radius:9px;padding:2px;gap:2px;margin:4px 0 12px}
+.tabs button{flex:1;min-width:0;border:0;background:transparent;color:var(--text);border-radius:7px;padding:8px 4px;font-size:13px;font-weight:600;overflow-wrap:anywhere}
+.tabs button.selected{background:var(--card);box-shadow:0 1px 3px rgba(0,0,0,.15)}
+button{font:inherit;font-size:17px;border:0;border-radius:12px;padding:11px 16px;background:var(--fill);color:var(--blue);cursor:pointer;font-weight:500;touch-action:manipulation}
+button:disabled{opacity:.35;cursor:default}
+button:active{opacity:.7}
+.primary{background:var(--blue);color:#fff;font-weight:600}
+.danger{background:var(--fill);color:var(--red)}
+input,select{font:inherit;font-size:17px;color:var(--text);background:var(--bg);border:0;border-radius:10px;padding:11px 12px;margin-top:4px;width:100%}
+input:focus{outline:2px solid var(--blue)}
+label{display:block;font-size:13px;color:var(--muted);font-weight:500}
 .fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}
-.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;align-items:center}
-.stats{display:flex;gap:25px;flex-wrap:wrap}
-.big{font-size:28px;font-weight:700}
-.muted{font-size:13px;color:#536a80;margin:6px 4px}
-.cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;align-items:center}
+.actions input[type=file]{width:auto;flex:1;min-width:180px}
+.actions input[type=password]{width:auto;flex:1;min-width:160px}
+.stats{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:14px}
+.stats>div{font-size:13px;color:var(--muted)}
+.big{font-size:28px;font-weight:700;color:var(--text);margin-top:2px}
+.muted{font-size:13px;color:var(--muted);margin:6px 2px;line-height:1.4}
+.cards{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0 0 12px}
 .cell{position:relative}
-.card{width:100%;min-height:115px;background:white;border:2px solid #c4d9ec;font-weight:600;overflow-wrap:anywhere;padding-top:30px}
-.card:active{background:#cce6fc}
-.cellundo{position:absolute;top:6px;right:6px;z-index:2;padding:2px 8px;font-size:15px;line-height:1.2;background:white;border:1px solid #bfd0df;color:#952323;border-radius:6px}
+.card{width:100%;min-height:112px;background:var(--card);color:var(--text);border-radius:14px;text-align:left;padding:34px 12px 12px;font-size:15px;font-weight:500;overflow-wrap:anywhere;box-shadow:0 1px 2px rgba(0,0,0,.06);transition:transform .08s}
+.card:active{transform:scale(.97);background:var(--card)}
+.count{display:block;font-size:30px;font-weight:700;color:var(--blue);margin-bottom:4px}
+.cellundo{position:absolute;top:8px;right:8px;z-index:2;width:30px;height:30px;padding:0;border-radius:50%;font-size:15px;line-height:30px;text-align:center;background:var(--fill);color:var(--red)}
 .cellundo:disabled{opacity:.3}
-.count{display:block;font-size:30px;color:#146ab1;margin-bottom:4px}
-.scroll{overflow-x:auto;margin:10px 4px}
+.scroll{overflow-x:auto;margin:10px -4px 0;-webkit-overflow-scrolling:touch}
 table{width:100%;border-collapse:collapse;font-size:13px}
-th,td{text-align:left;border-bottom:1px solid #d8e4ee;padding:8px;vertical-align:top}
-th{background:#edf4fa;white-space:normal;min-width:72px}
+th,td{text-align:left;border-bottom:.5px solid var(--sep);padding:8px;vertical-align:top;color:var(--text)}
+th{font-size:12px;font-weight:600;color:var(--muted);white-space:normal;min-width:72px}
 td{white-space:nowrap}
 td:first-child{font-weight:600;min-width:180px}
 td.n{text-align:right;font-variant-numeric:tabular-nums}
-tr.tot td{font-weight:700;background:#f5f8fb}
-textarea{width:100%;min-height:200px}
+tr.tot td{font-weight:700;background:var(--bg)}
+textarea{width:100%;min-height:180px;font:13px ui-monospace,monospace;color:var(--text);background:var(--bg);border:0;border-radius:10px;padding:10px}
 #textPanel{display:none}
-#notice,#anotice,#pinMsg{min-height:20px}
-.obs{border-left:4px solid #146ab1;padding-left:12px;margin-top:10px;box-shadow:none;padding-top:0;padding-bottom:0;background:none}
-details{margin-bottom:6px}
-summary{cursor:pointer;list-style:none;padding:9px 10px;border-radius:8px;background:#edf4fa;color:#143b60;font-weight:600;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+#notice,#anotice,#pinMsg{min-height:20px;font-size:14px}
+#notice{color:var(--blue)}
+#pinMsg{color:var(--red)}
+.obs{margin-top:10px}
+details{margin-bottom:8px}
+summary{cursor:pointer;list-style:none;padding:12px 12px;border-radius:12px;background:var(--bg);color:var(--text);font-weight:600;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center}
 summary::-webkit-details-marker{display:none}
-summary::before{content:'\25B8';margin-right:8px;color:#146ab1}
+summary::before{content:'\25B8';color:var(--blue);font-size:15px;margin-right:2px}
 details[open]>summary::before{content:'\25BE'}
-details.dir>summary{background:#f5f8fb;color:#146ab1;font-weight:500}
-.sd{font-weight:400;font-size:13px;color:#56708a}
+details.dir>summary{color:var(--blue);font-weight:500;background:var(--bg)}
+details.dir{margin-left:6px}
+.sd{font-weight:400;font-size:13px;color:var(--muted)}
+.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:20;display:flex;background:var(--navbg);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-top:.5px solid var(--sep);padding:6px 0 calc(6px + env(safe-area-inset-bottom))}
+.tabbar button{flex:1;background:transparent;color:var(--muted);border-radius:0;padding:4px 0;font-size:11px;font-weight:500;display:flex;flex-direction:column;align-items:center;gap:2px}
+.tabbar button.vsel{color:var(--blue)}
+.tabbar svg{width:26px;height:26px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 @media(min-width:750px){.cards{grid-template-columns:repeat(4,minmax(0,1fr))}}
-@media print{.no-print,.tabs,.cards,.views{display:none!important}body{background:white}header{background:white;color:black}.panel,section{border:1px solid #ddd;box-shadow:none}.scroll{overflow:visible}input,select{border:0}details{display:block}}
+@media print{.no-print,.tabs,.cards,.tabbar,.nav .muted{display:none!important}body{background:#fff;color:#000;padding:0}.nav{position:static;background:#fff;border:0}.panel,section{box-shadow:none;border:1px solid #ddd}.scroll{overflow:visible;margin:0}input,select{border:0}details{display:block}details>*{display:block}}
 </style></head><body>
-<header><h1>Four-Direction Traffic Counter</h1><p>Counter and admin · shared through Supabase</p>
-<nav class="views no-print"><button id="vCount" class="vsel">Counter</button><button id="vAdmin">Admin</button><span id="syncMsg"></span></nav></header>
+<header class="nav"><h1>Traffic Counter</h1><p>Counter and admin · shared through Supabase</p><span id="syncMsg"></span></header>
 <main>
 <div id="viewCount">
 <nav class="tabs no-print" id="tabs" aria-label="Direction pages"></nav>
-<div class="panel"><h2 id="heading"></h2>
+<section><h2 id="heading"></h2>
 <div class="fields"><label>Direction / approach name<input id="name"></label><label>Location / station<input id="location"></label><label>Observer<input id="observer"></label><label>Survey date<input type="date" id="date"></label></div>
-<div class="actions no-print"><button id="start" class="primary">Start this direction</button><button id="pause">Pause</button><button id="undo">Undo last entry</button><button id="finish" class="primary">Finish this direction</button><button id="resetCounts" class="danger">Reset counts only</button><button id="reset" class="danger">Reset everything</button></div>
+<div class="actions no-print"><button id="start" class="primary">Start</button><button id="pause">Pause</button><button id="undo">Undo last</button><button id="finish" class="primary">Finish</button><button id="resetCounts" class="danger">Reset counts</button><button id="reset" class="danger">Reset all</button></div>
 <p id="notice" class="muted" role="status" aria-live="polite"></p>
 <div class="stats"><div>All recorded entries<div class="big" id="total"></div></div><div>Vehicle entries*<div class="big" id="vehicles"></div></div><div>Active time<div class="big" id="clock"></div></div><div>Status<div class="big" id="status"></div></div></div>
 <p class="muted" id="times"></p>
-<p class="muted">*Vehicle entries exclude pedestrians and animal carts. All recorded entries include all 17 categories. Counts are not PCUs.</p></div>
-<h2 class="no-print">Tap the category for each passing vehicle or road user</h2>
+<p class="muted">*Vehicle entries exclude pedestrians and animal carts. All recorded entries include all 17 categories. Counts are not PCUs.</p></section>
+<h3 class="no-print">Tap the category for each passing vehicle or road user</h3>
 <div class="cards no-print" id="cards"></div>
 <section><h2>Current direction summary</h2><div class="scroll"><table id="summary"></table></div>
-<h2>Current direction time intervals</h2><p class="muted">15-minute intervals follow the device's local clock. Only intervals with entries are shown.</p><div class="scroll"><table id="intervalTable"></table></div>
-<div class="actions no-print"><button id="exportOne" class="primary">Export this direction CSV</button><button id="exportLog">Export all entry logs CSV</button><button id="print">Print / save PDF</button></div></section>
-<section id="textPanel" class="no-print"><h2>Copyable export</h2><p>If your iPhone viewer blocks downloads, select and copy this text.</p><textarea id="exportText" readonly></textarea></section>
+<h2 style="margin-top:18px">Time intervals</h2><p class="muted">15-minute intervals follow the device's local clock. Only intervals with entries are shown.</p><div class="scroll"><table id="intervalTable"></table></div>
+<div class="actions no-print"><button id="exportOne" class="primary">Export this direction CSV</button><button id="exportLog">Export entry logs CSV</button><button id="print">Print / PDF</button></div></section>
+<section id="textPanel" class="no-print"><h2>Copyable export</h2><p class="muted">If your viewer blocks downloads, select and copy this text.</p><textarea id="exportText" readonly></textarea></section>
 </div>
 
 <div id="viewAdmin" hidden>
 <section id="lockBox"><h2>Admin locked</h2><p class="muted">Enter the admin PIN to view the data.</p>
-<div class="actions"><input type="password" id="pin" inputmode="numeric" autocomplete="off" placeholder="PIN" style="width:auto"><button id="unlock" class="primary">Unlock</button></div>
+<div class="actions"><input type="password" id="pin" autocomplete="off" placeholder="PIN"><button id="unlock" class="primary">Unlock</button></div>
 <p id="pinMsg" class="muted"></p></section>
 <div id="adminBody" hidden>
-<section><div class="actions"><input type="file" id="afile" multiple accept=".csv" style="width:auto"><button id="arefresh">Refresh now</button><button id="aremove" class="danger">Remove CSV imports</button><button id="lock">Lock admin</button></div>
+<section><div class="actions"><input type="file" id="afile" multiple accept=".csv"><button id="arefresh">Refresh</button><button id="aremove" class="danger">Remove CSV imports</button><button id="lock">Lock</button></div>
 <p id="anotice" class="muted"></p></section>
 <div id="aout"></div>
 </div>
 </div>
 </main>
+
+<nav class="tabbar no-print" aria-label="Main">
+<button id="vCount" class="vsel"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>Counter</button>
+<button id="vAdmin"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>Admin</button>
+</nav>
 
 <script>
 'use strict';
@@ -114,13 +129,24 @@ const UPSERT={method:'POST',headers:{Prefer:'resolution=merge-duplicates'}};
 /* ================= COUNTER ================= */
 function today(){let d=new Date();return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())}
 function fresh(i){return {uid:rid(),name:'Direction '+(i+1),location:'',observer:'',date:today(),interval:'15',status:'Ready',start:null,end:null,ms:0,events:[]}}
-let app={version:1,active:0,directions:[0,1,2,3].map(fresh)},anchors=[null,null,null,null],storage=true;
+let app={version:1,active:0,directions:[0,1,2,3].map(fresh),archives:[]},anchors=[null,null,null,null],storage=true;
 function valid(x){return x&&x.version===1&&Number.isInteger(x.active)&&x.active>=0&&x.active<4&&Array.isArray(x.directions)&&x.directions.length===4&&x.directions.every(d=>d&&fields.every(f=>typeof d[f]==='string')&&['Ready','Counting','Paused','Finished'].includes(d.status)&&Number.isFinite(d.ms)&&d.ms>=0&&Array.isArray(d.events)&&d.events.every(e=>Number.isInteger(e.category)&&e.category>=0&&e.category<17&&Number.isFinite(e.time)))}
 try{let old=JSON.parse(localStorage.getItem(KEY));if(valid(old))app=old}catch(e){storage=false}
+if(!Array.isArray(app.archives))app.archives=[];
 app.directions.forEach(d=>{d.uid=d.uid||rid();d.interval='15';if(d.status==='Counting')d.status='Paused'});
 function current(){return app.directions[app.active]}
 function persist(){try{localStorage.setItem(KEY,JSON.stringify(app))}catch(e){storage=false;$('notice').textContent='Browser storage unavailable. Export or copy results before closing.'}}
 function checkpoint(){const now=Date.now();app.directions.forEach((d,i)=>{if(d.status==='Counting'&&anchors[i]!==null){d.ms+=Math.max(0,now-anchors[i]);anchors[i]=now}});persist()}
+/* Saves the final state of a direction before it is cleared, so the admin keeps it */
+function archiveCurrent(i){
+  checkpoint();
+  const d=app.directions[i];
+  if(!d.events.length&&!d.start)return;
+  const s=JSON.parse(JSON.stringify(d));
+  s.status='Cleared '+new Date().toLocaleString();
+  app.archives=app.archives.filter(a=>a.id!==d.uid).concat([{id:d.uid,data:s,archivedAt:new Date().toISOString()}]);
+  persist();
+}
 function stamp(t){return t?new Date(t).toLocaleString():'—'}
 function duration(d,i){let secs=Math.floor((d.ms+(anchors[i]===null?0:Math.max(0,Date.now()-anchors[i])))/1000);return [Math.floor(secs/3600),Math.floor(secs/60)%60,secs%60].map(pad).join(':')}
 function counts(d){let a=CATS.map(()=>0);d.events.forEach(e=>a[e.category]++);return a}
@@ -158,20 +184,20 @@ $('start').onclick=()=>{let d=current();if(!d.date){$('notice').textContent='Ent
 $('pause').onclick=()=>{let d=current();checkpoint();if(d.status==='Counting'){anchors[app.active]=null;d.status='Paused'}else{d.status='Counting';anchors[app.active]=Date.now()}persist();render();quickSync()};
 $('undo').onclick=()=>{let e=current().events.pop();checkpoint();render();quickSync();$('notice').textContent='Removed last '+CATS[e.category]+' entry from this direction.'};
 $('finish').onclick=()=>{if(!confirm('Finish and lock '+current().name+'? Other directions will not be affected.'))return;checkpoint();let d=current();d.status='Finished';d.end=Date.now();anchors[app.active]=null;persist();render();quickSync()};
-function dropRemote(id){delete lastPushed[id];if(SB_OK&&id)sb('directions?id=eq.'+encodeURIComponent(id),{method:'DELETE'}).catch(()=>{})}
 $('resetCounts').onclick=()=>{
   let d=current();
-  if(!confirm('Delete all counts and times for '+d.name+'? Name, location, observer and date will be kept. This cannot be undone. Export first if you need the data.'))return;
+  if(!confirm('Clear all counts and times for '+d.name+' on this device? Name, location, observer and date will be kept. The admin view keeps the cleared counts.'))return;
+  archiveCurrent(app.active);
   let keep={name:d.name,location:d.location,observer:d.observer,date:d.date};
-  app.directions[app.active]={...fresh(app.active),...keep,uid:d.uid};
+  app.directions[app.active]={...fresh(app.active),...keep};
   anchors[app.active]=null;persist();fill();render();quickSync();
-  $('notice').textContent='Counts cleared for '+keep.name+'. Name, location, observer and date kept.';
+  $('notice').textContent='Counts cleared for '+keep.name+'. The admin view keeps the earlier counts.';
 };
 $('reset').onclick=()=>{
-  if(!confirm('Reset EVERYTHING for '+current().name+'? This deletes all counts, times, name, location, observer and date. This cannot be undone. Export first if you need the data.'))return;
-  dropRemote(current().uid);
+  if(!confirm('Reset EVERYTHING for '+current().name+' on this device? This clears counts, times, name, location, observer and date. The admin view keeps the earlier counts.'))return;
+  archiveCurrent(app.active);
   app.directions[app.active]=fresh(app.active);anchors[app.active]=null;persist();fill();render();quickSync();
-  $('notice').textContent='Direction fully reset.';
+  $('notice').textContent='Direction fully reset. The admin view keeps the earlier counts.';
 };
 function metadata(d,i){return [['Direction page',i+1],...fields.map(f=>[f,d[f]]),['Interval summary','15 minutes'],['Status',d.status],['Started',stamp(d.start)],['Finished',stamp(d.end)],['Active time',duration(d,i)],[]]}
 function directionRows(){let d=current(),c=counts(d),n=d.events.length;return [...metadata(d,app.active),['Category','Count','Share of all entries (%)'],...CATS.map((t,i)=>[t,c[i],(n?100*c[i]/n:0).toFixed(1)]),['ALL RECORDED ENTRIES',n],['VEHICLE ENTRIES (excl. animal carts/pedestrians)',vehicleTotal(c)],[],['Interval start',...CATS,'Total'],...intervals(d).map(([t,a])=>[stamp(t),...a,sum(a)])]}
@@ -187,10 +213,17 @@ function quickSync(){clearTimeout(syncTimer);syncTimer=setTimeout(syncNow,400)}
 function syncNow(){
   if(!SB_OK){$('syncMsg').textContent='Local only (Supabase not configured)';return}
   const changed=app.directions.filter(d=>JSON.stringify(d)!==lastPushed[d.uid]).map(d=>({id:d.uid,data:d,updated_at:new Date().toISOString()}));
-  if(!changed.length)return;
+  const arch=app.archives.map(a=>({id:a.id,data:a.data,updated_at:a.archivedAt}));
+  const rows=[...changed,...arch];
+  if(!rows.length)return;
   const sent={};changed.forEach(r=>sent[r.id]=JSON.stringify(r.data));
-  sb('directions?on_conflict=id',{...UPSERT,body:JSON.stringify(changed)})
-    .then(()=>{Object.assign(lastPushed,sent);$('syncMsg').textContent='Synced '+new Date().toLocaleTimeString()})
+  const archIds=arch.map(a=>a.id);
+  sb('directions?on_conflict=id',{...UPSERT,body:JSON.stringify(rows)})
+    .then(()=>{
+      Object.assign(lastPushed,sent);
+      app.archives=app.archives.filter(a=>!archIds.includes(a.id));persist();
+      $('syncMsg').textContent='Synced '+new Date().toLocaleTimeString();
+    })
     .catch(()=>{$('syncMsg').textContent='Sync failed; saved on this device, will retry'});
 }
 setInterval(()=>{checkpoint();$('clock').textContent=duration(current(),app.active)},1000);
@@ -238,7 +271,7 @@ function adminHtml(rs){
   if(!rs.length)return '<section><p class="muted">No data yet. Start counting on the Counter tab, or import CSV files above.</p></section>';
   let h='';
   [...new Set(rs.map(r=>r.date))].sort().forEach(dt=>{
-    h+='<section><h2>Date: '+esc(fmtD(dt))+'</h2>';
+    h+='<section><h2>'+esc(fmtD(dt))+'</h2>';
     [...new Set(rs.filter(r=>r.date===dt).map(r=>r.observer))].sort().forEach(ob=>{
       const g=rs.filter(r=>r.date===dt&&r.observer===ob).sort((a,b)=>a.name.localeCompare(b.name));
       const t=g.reduce((s,r)=>s+totalOf(r),0);
@@ -261,7 +294,7 @@ function adminHtml(rs){
   const keys=[...new Set(bl.flatMap(b=>Object.keys(b)))].sort();
   const blRows=keys.map(k=>{const v=bl.map(b=>b[k]?sum(b[k]):0);return [fmtD(k.slice(0,10))+' · '+lbl(k),...v,sum(v)]});
   blRows.push(['Total',...rs.map(totalOf),grand]);
-  h+='<section><h2>Final combined summary – all directions</h2><h3>By category</h3>'+atable(['Category',...names,'All directions'],catRows)+
+  h+='<section><h2>Final combined summary</h2><h3>By category</h3>'+atable(['Category',...names,'All directions'],catRows)+
      '<h3>By 2-hour block</h3>'+atable(['Block',...names,'All directions'],blRows)+
      '<h3>All directions, categories by block</h3>'+blockTable(mergeB(bl),rs.some(r=>r.status==='Counting'))+'</section>';
   return h;
@@ -344,6 +377,7 @@ $('lock').onclick=lockAdmin;
 function setView(v){
   $('viewCount').hidden=v!=='c';$('viewAdmin').hidden=v!=='a';
   $('vCount').classList.toggle('vsel',v==='c');$('vAdmin').classList.toggle('vsel',v==='a');
+  window.scrollTo({top:0});
   if(v==='a'){showAdmin();if(adminUnlocked)pull()}
 }
 $('vCount').onclick=()=>setView('c');

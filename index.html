@@ -21,12 +21,16 @@ button:active{opacity:.7}
 .primary{background:var(--blue);color:#fff;font-weight:600}
 .danger{background:var(--fill);color:var(--red)}
 input,select{font:inherit;font-size:17px;color:var(--text);background:var(--bg);border:0;border-radius:10px;padding:11px 12px;margin-top:4px;width:100%}
-input:focus{outline:2px solid var(--blue)}
+input:focus,select:focus{outline:2px solid var(--blue)}
 label{display:block;font-size:13px;color:var(--muted);font-weight:500}
 .fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}
 .actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;align-items:center}
 .actions input[type=file]{width:auto;flex:1;min-width:180px}
 .actions input[type=password]{width:auto;flex:1;min-width:160px}
+.rowact{display:flex;gap:8px;flex-wrap:wrap;margin:4px 0 10px}
+.rowact button{padding:8px 12px;font-size:15px}
+.editbox{background:var(--bg);border-radius:12px;padding:12px;margin:4px 0 10px;display:grid;gap:10px}
+.editbox .actions{margin-top:0}
 .stats{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:14px}
 .stats>div{font-size:13px;color:var(--muted)}
 .big{font-size:28px;font-weight:700;color:var(--text);margin-top:2px}
@@ -233,7 +237,20 @@ window.addEventListener('pagehide',checkpoint);
 
 /* ================= ADMIN (PIN-protected) ================= */
 const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'],DAY=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-let remote=[],lastSigA='',adminUnlocked=false;
+let remote=[],lastSigA='',adminUnlocked=false,editState=null;
+function obOf(d){return d.observer||'(no observer)'}
+function obNames(){return [...new Set(remote.map(r=>r.data&&r.data.observer).filter(Boolean))].sort()}
+/* Edit form state for the observer field: an existing name, or '__new__' plus a typed name */
+function obsInit(ob){return obNames().includes(ob)?{obsSel:ob,newName:''}:{obsSel:'__new__',newName:ob||''}}
+function resolveObs(v){return ((v.obsSel==='__new__')?(v.newName||''):(v.obsSel||'')).trim()}
+function obsField(v){
+  const names=obNames(),sel=v.obsSel||'__new__';
+  let opts=names.map(n=>'<option value="'+esc(n)+'"'+(n===sel?' selected':'')+'>'+esc(n)+'</option>').join('');
+  opts+='<option value="__new__"'+(sel==='__new__'?' selected':'')+'>Add new name…</option>';
+  let h='<label>Observer<select data-f="obsSel">'+opts+'</select></label>';
+  if(sel==='__new__')h+='<label>New observer name<input data-f="newName" value="'+esc(v.newName||'')+'"></label>';
+  return h;
+}
 function fmtD(s){const [y,m,d]=s.split(/[- ]/).map(Number);return DAY[new Date(y,m-1,d).getDay()]+' '+pad(d)+' '+MON[m-1]+' '+y}
 function f12(h){return pad(h%12||12)+':00 '+(h<12?'AM':'PM')}
 function lbl(k){const h=+k.slice(11,13);return f12(h)+' – '+f12((h+2)%24)}
@@ -249,7 +266,7 @@ function toRec(id,d){
   const mins=+d.interval||15,bins={};
   (d.events||[]).forEach(e=>{if(e.category<0||e.category>16)return;const k=ms2key(e.time,mins);(bins[k]=bins[k]||Array(17).fill(0))[e.category]++});
   if(!Object.keys(bins).length)return null;
-  return {id,observer:d.observer||'(no observer)',name:d.name||'',location:d.location||'',date:d.date,status:d.status||'',
+  return {id,observer:obOf(d),name:d.name||'',location:d.location||'',date:d.date,status:d.status||'',
     started:d.start?new Date(d.start).toLocaleString():(d.startedText||'—'),
     finished:d.end?new Date(d.end).toLocaleString():(d.finishedText||'—'),
     active:d.activeText||hms(d.ms),bins};
@@ -267,6 +284,24 @@ function blockTable(bins,live){
   rows.push(['Total',...ks.map(()=>''),ks.reduce((s,k)=>s+sum(bins[k]),0)]);
   return atable(head,rows);
 }
+function editFields(v,keys){
+  const L={name:'Direction name',location:'Location',date:'Survey date'};
+  return keys.map(k=>'<label>'+L[k]+'<input'+(k==='date'?' type="date"':'')+' data-f="'+k+'" value="'+esc(v[k]||'')+'"></label>').join('');
+}
+function dirVals(d){return {...obsInit(d.observer||''),name:d.name||'',location:d.location||'',date:d.date||''}}
+function dirActions(r){
+  if(editState&&editState.type==='dir'&&editState.id===r.id)
+    return '<div class="editbox">'+obsField(editState.vals)+editFields(editState.vals,['name','location','date'])+
+      '<div class="actions"><button class="primary" data-act="dir-save">Save</button><button data-act="cancel">Cancel</button></div></div>';
+  return '<div class="rowact"><button data-act="dir-edit" data-id="'+esc(r.id)+'">Edit details</button><button class="danger" data-act="dir-del" data-id="'+esc(r.id)+'">Delete</button></div>';
+}
+function obsActions(dt,ob){
+  if(editState&&editState.type==='obs'&&editState.date===dt&&editState.observer===ob)
+    return '<div class="editbox">'+obsField(editState.vals)+editFields(editState.vals,['date'])+
+      '<p class="muted">Choose an existing observer to move these directions to them, or add a new name. Applies to every direction under this observer on this date.</p>'+
+      '<div class="actions"><button class="primary" data-act="obs-save">Save</button><button data-act="cancel">Cancel</button></div></div>';
+  return '<div class="rowact"><button data-act="obs-edit" data-date="'+esc(dt)+'" data-observer="'+esc(ob)+'">Edit observer</button><button class="danger" data-act="obs-del" data-date="'+esc(dt)+'" data-observer="'+esc(ob)+'">Delete observer</button></div>';
+}
 function adminHtml(rs){
   if(!rs.length)return '<section><p class="muted">No data yet. Start counting on the Counter tab, or import CSV files above.</p></section>';
   let h='';
@@ -275,14 +310,15 @@ function adminHtml(rs){
     [...new Set(rs.filter(r=>r.date===dt).map(r=>r.observer))].sort().forEach(ob=>{
       const g=rs.filter(r=>r.date===dt&&r.observer===ob).sort((a,b)=>a.name.localeCompare(b.name));
       const t=g.reduce((s,r)=>s+totalOf(r),0);
-      h+='<details class="obs" data-k="o:'+esc(dt+ob)+'"><summary><span>Observer: '+esc(ob)+'</span><span class="sd">'+g.length+' direction(s) · '+t+' entries</span></summary>';
+      h+='<details class="obs" data-k="o:'+esc(dt+ob)+'"><summary><span>Observer: '+esc(ob)+'</span><span class="sd">'+g.length+' direction(s) · '+t+' entries</span></summary>'+obsActions(dt,ob);
       g.forEach(r=>{
         h+='<details class="dir" data-k="r:'+esc(r.id)+'"><summary><span>'+esc(r.name+' · '+r.location)+'</span><span class="sd">'+totalOf(r)+' entries</span></summary>'+
            '<p class="muted">Started: '+esc(r.started)+' · Finished: '+esc(r.finished)+' · Active time: '+esc(r.active)+' · Status: '+esc(r.status)+'</p>'+
-           blockTable(blocksOf(r),r.status==='Counting')+'</details>';
+           dirActions(r)+blockTable(blocksOf(r),r.status==='Counting')+'</details>';
       });
       h+='<details class="dir" data-k="c:'+esc(dt+ob)+'"><summary><span>Combined – observer '+esc(ob)+' (all directions)</span><span class="sd">'+t+' entries</span></summary>'+
-         blockTable(mergeB(g.map(blocksOf)),g.some(r=>r.status==='Counting'))+'</details></details>';
+         blockTable(mergeB(g.map(blocksOf)),g.some(r=>r.status==='Counting'))+'</details>';
+      h+='</details>';
     });
     h+='</section>';
   });
@@ -302,6 +338,7 @@ function adminHtml(rs){
 function anote(t){$('anotice').textContent=t}
 function renderAdmin(force){
   if(!adminUnlocked)return;
+  if(editState&&!force)return;
   const sig=JSON.stringify(remote);if(!force&&sig===lastSigA)return;lastSigA=sig;
   const open=new Set([...document.querySelectorAll('#aout details[open]')].map(d=>d.dataset.k));
   $('aout').innerHTML=adminHtml(recs());
@@ -313,6 +350,61 @@ async function pull(){
   try{remote=await sb('directions?select=id,data');anote('');renderAdmin(false)}
   catch(e){anote('Could not load data from Supabase: '+e.message)}
 }
+async function patchRow(id,data){await sb('directions?id=eq.'+encodeURIComponent(id),{method:'PATCH',body:JSON.stringify({data,updated_at:new Date().toISOString()})})}
+async function deleteRow(id){await sb('directions?id=eq.'+encodeURIComponent(id),{method:'DELETE'})}
+const aout=$('aout');
+aout.addEventListener('input',e=>{const f=e.target.dataset&&e.target.dataset.f;if(f&&editState&&f!=='obsSel')editState.vals[f]=e.target.value});
+aout.addEventListener('change',e=>{
+  const f=e.target.dataset&&e.target.dataset.f;if(!f||!editState)return;
+  editState.vals[f]=e.target.value;
+  if(f==='obsSel')renderAdmin(true);
+});
+aout.addEventListener('click',async e=>{
+  const b=e.target.closest('button[data-act]');if(!b)return;
+  const act=b.dataset.act;
+  try{
+    if(act==='cancel'){editState=null;renderAdmin(true);return}
+    if(act==='dir-edit'){
+      const row=remote.find(x=>x.id===b.dataset.id);if(!row)return;
+      editState={type:'dir',id:row.id,vals:dirVals(row.data)};renderAdmin(true);return;
+    }
+    if(act==='dir-save'){
+      const v=editState.vals;const row=remote.find(x=>x.id===editState.id);
+      if(!row){anote('That direction no longer exists. Refresh the page.');return}
+      const newObs=resolveObs(v);
+      if(!newObs||!v.date){anote('Observer and survey date are required.');return}
+      await patchRow(row.id,{...row.data,observer:newObs,name:(v.name||'').trim(),location:(v.location||'').trim(),date:v.date});
+      editState=null;anote('Direction updated.');await pull();renderAdmin(true);return;
+    }
+    if(act==='dir-del'){
+      const row=remote.find(x=>x.id===b.dataset.id);if(!row)return;
+      if(!confirm('Delete this direction from the admin view and the database? If its phone counts again, the direction will be uploaded again.'))return;
+      await deleteRow(row.id);
+      if(editState&&editState.id===row.id)editState=null;
+      anote('Direction deleted.');await pull();renderAdmin(true);return;
+    }
+    if(act==='obs-edit'){
+      const dt=b.dataset.date,ob=b.dataset.observer;
+      editState={type:'obs',date:dt,observer:ob,vals:{...obsInit(ob),date:dt}};
+      renderAdmin(true);return;
+    }
+    if(act==='obs-save'){
+      const v=editState.vals;const newObs=resolveObs(v);
+      if(!newObs||!v.date){anote('Observer and survey date are required.');return}
+      const ids=remote.filter(x=>x.data&&x.data.date===editState.date&&obOf(x.data)===editState.observer);
+      await Promise.all(ids.map(x=>patchRow(x.id,{...x.data,observer:newObs,date:v.date})));
+      editState=null;anote('Moved '+ids.length+' direction(s) to observer "'+newObs+'".');await pull();renderAdmin(true);return;
+    }
+    if(act==='obs-del'){
+      const dt=b.dataset.date,ob=b.dataset.observer;
+      const ids=remote.filter(x=>x.data&&x.data.date===dt&&obOf(x.data)===ob);
+      if(!confirm('Delete all '+ids.length+' direction(s) for observer "'+ob+'" on this date? Phones may upload them again if they count again.'))return;
+      await Promise.all(ids.map(x=>deleteRow(x.id)));
+      if(editState&&editState.type==='obs'&&editState.date===dt&&editState.observer===ob)editState=null;
+      anote('Observer deleted ('+ids.length+' direction(s)).');await pull();renderAdmin(true);return;
+    }
+  }catch(err){anote('Could not complete that action: '+err.message)}
+});
 function mdy(s){const m=/(\d+)\/(\d+)\/(\d+),\s*(\d+):(\d+):\d+\s*(AM|PM)/i.exec(s);if(!m)return null;let h=+m[4]%12;if(/PM/i.test(m[6]))h+=12;return m[3]+'-'+pad(m[1])+'-'+pad(m[2])+' '+pad(h)+':'+pad(m[5])}
 function parseCSV(text){
   const out=[];let row=[],f='',q=false;
@@ -368,7 +460,7 @@ async function unlock(){
   if(h!==ADMIN_PIN_HASH){$('pinMsg').textContent='Incorrect PIN.';return}
   adminUnlocked=true;$('pinMsg').textContent='';showAdmin();pull();
 }
-function lockAdmin(){adminUnlocked=false;remote=[];lastSigA='';$('aout').innerHTML='';anote('');showAdmin()}
+function lockAdmin(){adminUnlocked=false;editState=null;remote=[];lastSigA='';$('aout').innerHTML='';anote('');showAdmin()}
 $('unlock').onclick=unlock;
 $('pin').onkeydown=e=>{if(e.key==='Enter')unlock()};
 $('lock').onclick=lockAdmin;
@@ -386,6 +478,8 @@ $('vAdmin').onclick=()=>setView('a');
 setInterval(()=>{if(adminUnlocked&&!$('viewAdmin').hidden)pull()},3000);
 
 /* ================= START ================= */
+/* Directions that have not started take the phone's current date on every load or refresh */
+app.directions.forEach(d=>{if(d.status==='Ready')d.date=today()});
 fill();persist();render();
 if(!storage)$('notice').textContent='Storage unavailable. Export or copy results before closing.';
 showAdmin();

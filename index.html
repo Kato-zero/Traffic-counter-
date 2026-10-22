@@ -10,11 +10,12 @@ body{margin:0;background:var(--bg);color:var(--text);font:17px -apple-system,Bli
 .nav .tabs{margin:8px 0 0;background:var(--fill)}
 main{max-width:720px;margin:0 auto;padding:12px 16px}
 h2{font-size:22px;font-weight:700;margin:4px 0 10px}
+h2#heading{color:var(--blue)}
 h3{font-size:17px;font-weight:600;margin:16px 0 8px}
 .panel,section{background:var(--card);border-radius:14px;padding:16px;margin:0 0 12px}
 .tabs{display:flex;background:var(--fill);border-radius:9px;padding:2px;gap:2px;margin:4px 0 12px}
-.tabs button{flex:1;min-width:0;border:0;background:transparent;color:var(--text);border-radius:7px;padding:8px 4px;font-size:13px;font-weight:600;overflow-wrap:anywhere}
-.tabs button.selected{background:var(--card);box-shadow:0 1px 3px rgba(0,0,0,.15)}
+.tabs button{flex:1;min-width:0;border:0;background:transparent;color:var(--blue);border-radius:7px;padding:8px 4px;font-size:13px;font-weight:600;overflow-wrap:anywhere}
+.tabs button.selected{background:var(--blue);color:#fff;box-shadow:none}
 button{font:inherit;font-size:17px;border:0;border-radius:12px;padding:11px 16px;background:var(--fill);color:var(--blue);cursor:pointer;font-weight:500;touch-action:manipulation}
 button:disabled{opacity:.35;cursor:default}
 button:active{opacity:.7}
@@ -284,29 +285,40 @@ function blockTable(bins,live){
   rows.push(['Total',...ks.map(()=>''),ks.reduce((s,k)=>s+sum(bins[k]),0)]);
   return atable(head,rows);
 }
-function editFields(v,keys){
-  const L={name:'Direction name',location:'Location',date:'Survey date'};
-  return keys.map(k=>'<label>'+L[k]+'<input'+(k==='date'?' type="date"':'')+' data-f="'+k+'" value="'+esc(v[k]||'')+'"></label>').join('');
+/* ---- CSV export for one date, grouped by observer ---- */
+function csvEsc(v){const s=String(v??'');return /[",\r\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s}
+function downloadCsv(name,rows){
+  const text='\ufeff'+rows.map(r=>r.map(csvEsc).join(',')).join('\r\n');
+  const u=URL.createObjectURL(new Blob([text],{type:'text/csv;charset=utf-8'}));
+  const a=document.createElement('a');a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(u),60000);
 }
-function dirVals(d){return {...obsInit(d.observer||''),name:d.name||'',location:d.location||'',date:d.date||''}}
-function dirActions(r){
-  if(editState&&editState.type==='dir'&&editState.id===r.id)
-    return '<div class="editbox">'+obsField(editState.vals)+editFields(editState.vals,['name','location','date'])+
-      '<div class="actions"><button class="primary" data-act="dir-save">Save</button><button data-act="cancel">Cancel</button></div></div>';
-  return '<div class="rowact"><button data-act="dir-edit" data-id="'+esc(r.id)+'">Edit details</button><button class="danger" data-act="dir-del" data-id="'+esc(r.id)+'">Delete</button></div>';
-}
-function obsActions(dt,ob){
-  if(editState&&editState.type==='obs'&&editState.date===dt&&editState.observer===ob)
-    return '<div class="editbox">'+obsField(editState.vals)+editFields(editState.vals,['date'])+
-      '<p class="muted">Choose an existing observer to move these directions to them, or add a new name. Applies to every direction under this observer on this date.</p>'+
-      '<div class="actions"><button class="primary" data-act="obs-save">Save</button><button data-act="cancel">Cancel</button></div></div>';
-  return '<div class="rowact"><button data-act="obs-edit" data-date="'+esc(dt)+'" data-observer="'+esc(ob)+'">Edit observer</button><button class="danger" data-act="obs-del" data-date="'+esc(dt)+'" data-observer="'+esc(ob)+'">Delete observer</button></div>';
+function dateCsvRows(dt){
+  const day=recs().filter(r=>r.date===dt);
+  const rows=[['Date','Observer','Direction','Location','Time block',...CATS,'Total']];
+  const dateTot=Array(17).fill(0);
+  [...new Set(day.map(r=>r.observer))].sort().forEach(ob=>{
+    const g=day.filter(r=>r.observer===ob).sort((a,b)=>a.name.localeCompare(b.name));
+    const obTot=Array(17).fill(0);
+    g.forEach(r=>{
+      const bl=blocksOf(r);
+      Object.keys(bl).sort().forEach(k=>{
+        const c=bl[k];
+        rows.push([fmtD(dt),ob,r.name,r.location,lbl(k),...c,sum(c)]);
+        c.forEach((v,i)=>{obTot[i]+=v;dateTot[i]+=v});
+      });
+    });
+    rows.push([fmtD(dt),ob,'OBSERVER TOTAL','','',...obTot,sum(obTot)]);
+    rows.push([]);
+  });
+  rows.push([fmtD(dt),'','DATE TOTAL','','',...dateTot,sum(dateTot)]);
+  return rows;
 }
 function adminHtml(rs){
   if(!rs.length)return '<section><p class="muted">No data yet. Start counting on the Counter tab, or import CSV files above.</p></section>';
   let h='';
   [...new Set(rs.map(r=>r.date))].sort().forEach(dt=>{
-    h+='<section><h2>'+esc(fmtD(dt))+'</h2>';
+    h+='<section><h2>'+esc(fmtD(dt))+'</h2><div class="rowact"><button data-act="date-csv" data-date="'+esc(dt)+'">Download CSV for this date</button></div>';
     [...new Set(rs.filter(r=>r.date===dt).map(r=>r.observer))].sort().forEach(ob=>{
       const g=rs.filter(r=>r.date===dt&&r.observer===ob).sort((a,b)=>a.name.localeCompare(b.name));
       const t=g.reduce((s,r)=>s+totalOf(r),0);
@@ -352,6 +364,24 @@ async function pull(){
 }
 async function patchRow(id,data){await sb('directions?id=eq.'+encodeURIComponent(id),{method:'PATCH',body:JSON.stringify({data,updated_at:new Date().toISOString()})})}
 async function deleteRow(id){await sb('directions?id=eq.'+encodeURIComponent(id),{method:'DELETE'})}
+function dirVals(d){return {...obsInit(d.observer||''),name:d.name||'',location:d.location||'',date:d.date||''}}
+function editFields(v,keys){
+  const L={name:'Direction name',location:'Location',date:'Survey date'};
+  return keys.map(k=>'<label>'+L[k]+'<input'+(k==='date'?' type="date"':'')+' data-f="'+k+'" value="'+esc(v[k]||'')+'"></label>').join('');
+}
+function dirActions(r){
+  if(editState&&editState.type==='dir'&&editState.id===r.id)
+    return '<div class="editbox">'+obsField(editState.vals)+editFields(editState.vals,['name','location','date'])+
+      '<div class="actions"><button class="primary" data-act="dir-save">Save</button><button data-act="cancel">Cancel</button></div></div>';
+  return '<div class="rowact"><button data-act="dir-edit" data-id="'+esc(r.id)+'">Edit details</button><button class="danger" data-act="dir-del" data-id="'+esc(r.id)+'">Delete</button></div>';
+}
+function obsActions(dt,ob){
+  if(editState&&editState.type==='obs'&&editState.date===dt&&editState.observer===ob)
+    return '<div class="editbox">'+obsField(editState.vals)+editFields(editState.vals,['date'])+
+      '<p class="muted">Choose an existing observer to move these directions to them, or add a new name. Applies to every direction under this observer on this date.</p>'+
+      '<div class="actions"><button class="primary" data-act="obs-save">Save</button><button data-act="cancel">Cancel</button></div></div>';
+  return '<div class="rowact"><button data-act="obs-edit" data-date="'+esc(dt)+'" data-observer="'+esc(ob)+'">Edit observer</button><button class="danger" data-act="obs-del" data-date="'+esc(dt)+'" data-observer="'+esc(ob)+'">Delete observer</button></div>';
+}
 const aout=$('aout');
 aout.addEventListener('input',e=>{const f=e.target.dataset&&e.target.dataset.f;if(f&&editState&&f!=='obsSel')editState.vals[f]=e.target.value});
 aout.addEventListener('change',e=>{
@@ -363,6 +393,11 @@ aout.addEventListener('click',async e=>{
   const b=e.target.closest('button[data-act]');if(!b)return;
   const act=b.dataset.act;
   try{
+    if(act==='date-csv'){
+      const dt=b.dataset.date;
+      downloadCsv('traffic-'+dt+'.csv',dateCsvRows(dt));
+      anote('CSV downloaded for '+fmtD(dt)+'.');return;
+    }
     if(act==='cancel'){editState=null;renderAdmin(true);return}
     if(act==='dir-edit'){
       const row=remote.find(x=>x.id===b.dataset.id);if(!row)return;

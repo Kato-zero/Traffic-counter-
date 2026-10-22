@@ -1,3 +1,358 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Four-Direction Traffic Counter</title><style>*{box-sizing:border-box}body{margin:0;background:#eff4f9;color:#18324c;font:16px system-ui,sans-serif}header{background:#143b60;color:white;padding:20px}h1{font-size:24px;margin:0}main{max-width:1200px;margin:auto;padding:12px}h2{font-size:20px}.panel{padding:16px;background:white;border-radius:12px;margin:12px 0}.tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;position:sticky;top:0;z-index:5;background:#eff4f9;padding:8px 0}.tabs button{padding:12px 3px;overflow-wrap:anywhere}.selected{background:#146ab1!important;color:white!important}button{font:inherit;border:1px solid #bfd0df;background:#e7f0f9;color:#173b5e;border-radius:8px;padding:12px;cursor:pointer;touch-action:manipulation}button:disabled{opacity:.4;cursor:default}.primary{background:#146ab1;color:white}.danger{background:#ffe8e8;color:#952323}input,select{font:inherit;width:100%;padding:10px;margin-top:5px;border:1px solid #b9cbdc;border-radius:6px}label{font-size:13px}.fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}.stats{display:flex;gap:25px;flex-wrap:wrap}.big{font-size:28px;font-weight:700}.muted{font-size:13px;color:#536a80}.cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.card{min-height:115px;background:white;border:2px solid #c4d9ec;font-weight:600;overflow-wrap:anywhere}.card:active{background:#cce6fc}.count{display:block;font-size:30px;color:#146ab1;margin-bottom:4px}.scroll{overflow:auto}table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;border-bottom:1px solid #d8e4ee;padding:9px;vertical-align:top}th{background:#edf4fa}textarea{width:100%;min-height:200px}#textPanel{display:none}#notice{min-height:20px} @media(min-width:750px){.cards{grid-template-columns:repeat(4,minmax(0,1fr))}}@media print{.no-print,.tabs,.cards{display:none!important}body{background:white}header{background:white;color:black}.panel{border:1px solid #ddd}.scroll{overflow:visible}input,select{border:0}}</style></head><body><header><h1>Four-Direction Traffic Counter</h1><p>17 categories · Four independent direction pages · One browser tab</p></header><main><nav class="tabs no-print" id="tabs" aria-label="Direction pages"></nav><div class="panel"><h2 id="heading"></h2><div class="fields"><label>Direction / approach name<input id="name"></label><label>Location / station<input id="location"></label><label>Observer<input id="observer"></label><label>Survey date<input type="date" id="date"></label><label>Interval summary<select id="interval"><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="60">60 minutes</option></select></label></div><div class="actions no-print"><button id="start" class="primary">Start this direction</button><button id="pause">Pause</button><button id="undo">Undo last entry</button><button id="finish" class="primary">Finish this direction</button><button id="reset" class="danger">Reset this direction</button></div><p id="notice" role="status" aria-live="polite"></p><div class="stats"><div>All recorded entries<div class="big" id="total"></div></div><div>Vehicle entries*<div class="big" id="vehicles"></div></div><div>Active time<div class="big" id="clock"></div></div><div>Status<div class="big" id="status"></div></div></div><p class="muted" id="times"></p><p class="muted">*Vehicle entries exclude pedestrians and animal carts. All recorded entries include all 17 categories. Counts are not PCUs.</p></div><h2 class="no-print">Tap the category for each passing vehicle or road user</h2><div class="cards no-print" id="cards"></div><section class="panel"><h2>Current direction summary</h2><div class="scroll"><table id="summary"></table></div><h2>Current direction time intervals</h2><p class="muted">Intervals follow the device’s local clock. Only intervals with entries are shown.</p><div class="scroll"><table id="intervalTable"></table></div><div class="actions no-print"><button id="exportOne" class="primary">Export this direction CSV</button><button id="exportLog">Export all entry logs CSV</button><button id="print">Print / save PDF</button></div></section><section class="panel"><h2>Combined summary — all four directions</h2><p class="muted">Totals reflect entries recorded so far, including ongoing and paused surveys. Different directions may have different start/end times.</p><div class="scroll"><table id="combined"></table></div><div class="actions no-print"><button id="exportAll" class="primary">Export combined CSV</button><button id="show">Show copyable combined summary</button><button id="backup">Export complete backup</button><label><span>Restore backup</span><input id="restore" type="file" accept=".json,application/json"></label></div></section><section id="textPanel" class="panel no-print"><h2>Copyable export</h2><p>If your iPhone viewer blocks downloads, select and copy this text.</p><textarea id="exportText" readonly></textarea></section><section class="panel muted"><p>All four pages remain in this tab. Starting one direction does not start the others. Switching pages does not pause an active direction. Only taps on the currently visible page record entries. Each direction has a separate undo history.</p><p>Automatic browser saving is attempted when available. Export your results and backup before closing. This HTML file must run in a JavaScript-capable viewer or be hosted as a website; the iPhone Files preview may not run it. Test counting and exporting before field use.</p><p>Category names are reproduced as requested, without inferring missing HGV axle/weight limits. “&gt; 3 - axle” and “&gt; 4 - axle” are retained as supplied. Choose a consistent field classification rule to avoid overlap.</p><noscript>JavaScript is not running. Open in a JavaScript-capable viewer or host this file as a website.</noscript></section></main><script>
-'use strict';const categories=["Cars", "Pickup 4WD", "Smallbus <25 Seats", "Large Bus>25 Seats", "Light Goods Vehicle (LGV)- 2 axle < 3 ton", "Medium Goods Vehicle (MGV)- 2 axle > 3 ton", "Heavy Goods Vehicle (HGV)-", "Very heavy Goods Vehicle (VHGV) > 3 - axle", "Very Heavy Goods Vehicle (VHGV) > 4 - axle", "Trailer 2 axle", "Trailer 3 axle", "Trailer 4 axle", "Tractor", "Motorcycles", "Bicycles", "Animal cart", "Pedestrians"], $=id=>document.getElementById(id),KEY='four-direction-traffic-v1',fields=['name','location','observer','date','interval'];function today(){let d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}function fresh(i){return {name:'Direction '+(i+1),location:'',observer:'',date:today(),interval:'15',status:'Ready',start:null,end:null,ms:0,events:[]}}let app={version:1,active:0,directions:[0,1,2,3].map(fresh)},anchors=[null,null,null,null],storage=true;function valid(x){return x&&x.version===1&&Number.isInteger(x.active)&&x.active>=0&&x.active<4&&Array.isArray(x.directions)&&x.directions.length===4&&x.directions.every(d=>d&&fields.every(f=>typeof d[f]==='string')&&['15','30','60'].includes(d.interval)&&['Ready','Counting','Paused','Finished'].includes(d.status)&&Number.isFinite(d.ms)&&d.ms>=0&&Array.isArray(d.events)&&d.events.every(e=>Number.isInteger(e.category)&&e.category>=0&&e.category<17&&Number.isFinite(e.time)))}try{let old=JSON.parse(localStorage.getItem(KEY));if(valid(old))app=old}catch(e){storage=false}app.directions.forEach(d=>{if(d.status==='Counting')d.status='Paused'});function current(){return app.directions[app.active]}function persist(){try{localStorage.setItem(KEY,JSON.stringify(app))}catch(e){storage=false;$('notice').textContent='Browser storage unavailable. Export or copy results before closing.'}}function checkpoint(){const now=Date.now();app.directions.forEach((d,i)=>{if(d.status==='Counting'&&anchors[i]!==null){d.ms+=Math.max(0,now-anchors[i]);anchors[i]=now}});persist()}function esc(t){return String(t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}function stamp(t){return t?new Date(t).toLocaleString():'—'}function duration(d,i){let secs=Math.floor((d.ms+(anchors[i]===null?0:Math.max(0,Date.now()-anchors[i])))/1000);return [Math.floor(secs/3600),Math.floor(secs/60)%60,secs%60].map(n=>String(n).padStart(2,'0')).join(':')}function counts(d){let a=categories.map(()=>0);d.events.forEach(e=>a[e.category]++);return a}function vehicleTotal(a){return a.reduce((s,v,i)=>s+(i<15?v:0),0)}function intervals(d){let b=new Map();d.events.forEach(e=>{let date=new Date(e.time);date.setMinutes(Math.floor(date.getMinutes()/Number(d.interval))*Number(d.interval),0,0);let t=date.getTime();if(!b.has(t))b.set(t,categories.map(()=>0));b.get(t)[e.category]++});return [...b].sort((a,b)=>a[0]-b[0])}function table(rows){return rows.map((row,i)=>'<tr>'+row.map(v=>'<'+(i===0?'th':'td')+'>'+esc(v)+'</'+(i===0?'th':'td')+'>').join('')+'</tr>').join('')}function combinedRows(){let cs=app.directions.map(counts);return [['Category',...app.directions.map(d=>d.name),'All directions'],...categories.map((cat,j)=>[cat,...cs.map(c=>c[j]),cs.reduce((s,c)=>s+c[j],0)]),['ALL RECORDED ENTRIES',...app.directions.map(d=>d.events.length),app.directions.reduce((s,d)=>s+d.events.length,0)],['VEHICLE ENTRIES (excl. animal carts/pedestrians)',...cs.map(vehicleTotal),cs.reduce((s,c)=>s+vehicleTotal(c),0)]]}function fill(){let d=current();fields.forEach(f=>$(f).value=d[f])}function render(){let d=current(),c=counts(d),n=d.events.length;$('tabs').innerHTML='';app.directions.forEach((x,i)=>{let b=document.createElement('button');b.textContent=x.name+' · '+x.events.length;b.className=i===app.active?'selected':'';b.setAttribute('aria-pressed',i===app.active?'true':'false');b.onclick=()=>{checkpoint();app.active=i;persist();fill();render();$('notice').textContent=''};$('tabs').appendChild(b)});$('heading').textContent=d.name;$('total').textContent=n;$('vehicles').textContent=vehicleTotal(c);$('status').textContent=d.status;$('clock').textContent=duration(d,app.active);$('times').textContent='Started: '+stamp(d.start)+' | Finished: '+stamp(d.end);fields.forEach(f=>$(f).disabled=d.status!=='Ready');$('start').disabled=d.status!=='Ready';$('pause').disabled=!['Counting','Paused'].includes(d.status);$('pause').textContent=d.status==='Paused'?'Resume':'Pause';$('undo').disabled=!n||d.status==='Finished';$('finish').disabled=!['Counting','Paused'].includes(d.status);$('cards').innerHTML='';categories.forEach((cat,i)=>{let b=document.createElement('button');b.className='card';b.disabled=d.status!=='Counting';b.innerHTML='<span class="count">'+c[i]+'</span>'+esc(cat);b.onclick=()=>{if(current().status!=='Counting')return;current().events.push({category:i,time:Date.now()});checkpoint();render()};$('cards').appendChild(b)});$('summary').innerHTML=table([['Category','Count','Share of all entries (%)'],...categories.map((cat,i)=>[cat,c[i],(n?100*c[i]/n:0).toFixed(1)]),['ALL RECORDED ENTRIES',n,n?'100.0':'0.0']]);$('intervalTable').innerHTML=table([['Interval start',...categories,'Total'],...intervals(d).map(([t,a])=>[stamp(t),...a,a.reduce((s,v)=>s+v,0)])]);$('combined').innerHTML=table(combinedRows())}fields.forEach(f=>$(f).onchange=()=>{current()[f]=$(f).value.trim();if(f==='name'&&!current().name){current().name='Direction '+(app.active+1);$('name').value=current().name}persist();render()});$('start').onclick=()=>{let d=current();if(!d.date){$('notice').textContent='Enter a survey date.';return}d.start=Date.now();d.status='Counting';anchors[app.active]=d.start;persist();render();$('notice').textContent='Counting started for '+d.name+'.'};$('pause').onclick=()=>{let d=current();checkpoint();if(d.status==='Counting'){anchors[app.active]=null;d.status='Paused'}else{d.status='Counting';anchors[app.active]=Date.now()}persist();render()};$('undo').onclick=()=>{let e=current().events.pop();checkpoint();render();$('notice').textContent='Removed last '+categories[e.category]+' entry from this direction.'};$('finish').onclick=()=>{if(!confirm('Finish and lock '+current().name+'? Other directions will not be affected.'))return;checkpoint();let d=current();d.status='Finished';d.end=Date.now();anchors[app.active]=null;persist();render()};$('reset').onclick=()=>{if(!confirm('Clear all counts and details for '+current().name+' only? Export first.'))return;app.directions[app.active]=fresh(app.active);anchors[app.active]=null;persist();fill();render()};function metadata(d,i){return [['Direction page',i+1],...fields.map(f=>[f,d[f]]),['Status',d.status],['Started',stamp(d.start)],['Finished',stamp(d.end)],['Active time',duration(d,i)],[]]}function directionRows(){let d=current(),c=counts(d),n=d.events.length;return [...metadata(d,app.active),['Category','Count','Share of all entries (%)'],...categories.map((t,i)=>[t,c[i],(n?100*c[i]/n:0).toFixed(1)]),['ALL RECORDED ENTRIES',n],['VEHICLE ENTRIES (excl. animal carts/pedestrians)',vehicleTotal(c)],[],['Interval start',...categories,'Total'],...intervals(d).map(([t,a])=>[stamp(t),...a,a.reduce((s,v)=>s+v,0)])]}function show(text){$('exportText').value=text;$('textPanel').style.display='block'}function download(text,name,type){try{let u=URL.createObjectURL(new Blob([text],{type})),a=document.createElement('a');a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),60000)}catch(e){$('notice').textContent='Download blocked. Copy the export text instead.'}}function csv(rows,name){checkpoint();show(rows.map(r=>r.join('\t')).join('\n'));let text='\ufeff'+rows.map(r=>r.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(',')).join('\r\n');download(text,name,'text/csv;charset=utf-8')}$('exportOne').onclick=()=>csv(directionRows(),'traffic-direction-'+(app.active+1)+'.csv');$('exportAll').onclick=()=>csv([['Four-direction traffic count'],[],...app.directions.flatMap((d,i)=>metadata(d,i)),...combinedRows()],'traffic-all-directions.csv');$('show').onclick=()=>show(combinedRows().map(r=>r.join('\t')).join('\n'));$('exportLog').onclick=()=>{let events=app.directions.flatMap((d,i)=>d.events.map(e=>({...e,page:i+1,direction:d.name}))).sort((a,b)=>a.time-b.time);csv([['Sequence','Direction page','Direction name','Local timestamp','ISO timestamp','Category'],...events.map((e,i)=>[i+1,e.page,e.direction,stamp(e.time),new Date(e.time).toISOString(),categories[e.category]])],'traffic-all-entry-logs.csv')};$('backup').onclick=()=>{checkpoint();let text=JSON.stringify(app,null,2);show(text);download(text,'traffic-complete-backup.json','application/json')};$('restore').onchange=async e=>{let file=e.target.files[0];if(!file)return;try{let x=JSON.parse(await file.text());if(!valid(x))throw Error('Invalid backup');if(!confirm('Replace all four direction surveys with this backup? Export current results first.'))return;app=x;anchors=[null,null,null,null];app.directions.forEach(d=>{if(d.status==='Counting')d.status='Paused'});persist();fill();render();$('notice').textContent='Backup restored. Previously running directions are paused.'}catch(err){$('notice').textContent='Could not restore: invalid or unreadable backup.'}finally{e.target.value=''}};$('print').onclick=()=>{checkpoint();render();window.print()};setInterval(()=>{checkpoint();$('clock').textContent=duration(current(),app.active)},1000);document.addEventListener('visibilitychange',()=>{if(document.hidden)checkpoint()});window.addEventListener('pagehide',checkpoint);fill();persist();render();if(!storage)$('notice').textContent='Storage unavailable. Export or copy results before closing.';
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Traffic Counter and Admin</title><style>
+*{box-sizing:border-box}
+body{margin:0;background:#eff4f9;color:#18324c;font:16px system-ui,sans-serif}
+header{background:#143b60;color:white;padding:20px}
+h1{font-size:24px;margin:0}
+header p{margin:4px 0 0;font-size:13px;opacity:.85}
+.views{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:12px}
+.views button{background:transparent;color:white;border-color:#6d8fb3}
+.views .vsel{background:#fff!important;color:#143b60!important;border-color:#fff}
+#syncMsg{font-size:13px;opacity:.9;margin-left:6px}
+main{max-width:1280px;margin:auto;padding:12px}
+h2{font-size:20px}
+h3{font-size:16px;color:#143b60;margin:16px 0 8px}
+.panel,section{padding:16px;background:white;border-radius:12px;margin:12px 0;box-shadow:0 1px 2px rgba(0,0,0,.06)}
+.tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;position:sticky;top:0;z-index:5;background:#eff4f9;padding:8px 0}
+.tabs button{padding:12px 3px;overflow-wrap:anywhere}
+.selected{background:#146ab1!important;color:white!important}
+button{font:inherit;border:1px solid #bfd0df;background:#e7f0f9;color:#173b5e;border-radius:8px;padding:12px;cursor:pointer;touch-action:manipulation}
+button:disabled{opacity:.4;cursor:default}
+.primary{background:#146ab1;color:white;border-color:#146ab1}
+.danger{background:#ffe8e8;color:#952323;border-color:#952323}
+input,select{font:inherit;width:100%;padding:10px;margin-top:5px;border:1px solid #b9cbdc;border-radius:6px}
+label{font-size:13px}
+.fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;align-items:center}
+.stats{display:flex;gap:25px;flex-wrap:wrap}
+.big{font-size:28px;font-weight:700}
+.muted{font-size:13px;color:#536a80;margin:6px 4px}
+.cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.cell{position:relative}
+.card{width:100%;min-height:115px;background:white;border:2px solid #c4d9ec;font-weight:600;overflow-wrap:anywhere;padding-top:30px}
+.card:active{background:#cce6fc}
+.cellundo{position:absolute;top:6px;right:6px;z-index:2;padding:2px 8px;font-size:15px;line-height:1.2;background:white;border:1px solid #bfd0df;color:#952323;border-radius:6px}
+.cellundo:disabled{opacity:.3}
+.count{display:block;font-size:30px;color:#146ab1;margin-bottom:4px}
+.scroll{overflow-x:auto;margin:10px 4px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{text-align:left;border-bottom:1px solid #d8e4ee;padding:8px;vertical-align:top}
+th{background:#edf4fa;white-space:normal;min-width:72px}
+td{white-space:nowrap}
+td:first-child{font-weight:600;min-width:180px}
+td.n{text-align:right;font-variant-numeric:tabular-nums}
+tr.tot td{font-weight:700;background:#f5f8fb}
+textarea{width:100%;min-height:200px}
+#textPanel{display:none}
+#notice,#anotice,#pinMsg{min-height:20px}
+.obs{border-left:4px solid #146ab1;padding-left:12px;margin-top:10px;box-shadow:none;padding-top:0;padding-bottom:0;background:none}
+details{margin-bottom:6px}
+summary{cursor:pointer;list-style:none;padding:9px 10px;border-radius:8px;background:#edf4fa;color:#143b60;font-weight:600;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+summary::-webkit-details-marker{display:none}
+summary::before{content:'\25B8';margin-right:8px;color:#146ab1}
+details[open]>summary::before{content:'\25BE'}
+details.dir>summary{background:#f5f8fb;color:#146ab1;font-weight:500}
+.sd{font-weight:400;font-size:13px;color:#56708a}
+@media(min-width:750px){.cards{grid-template-columns:repeat(4,minmax(0,1fr))}}
+@media print{.no-print,.tabs,.cards,.views{display:none!important}body{background:white}header{background:white;color:black}.panel,section{border:1px solid #ddd;box-shadow:none}.scroll{overflow:visible}input,select{border:0}details{display:block}}
+</style></head><body>
+<header><h1>Four-Direction Traffic Counter</h1><p>Counter and admin · shared through Supabase</p>
+<nav class="views no-print"><button id="vCount" class="vsel">Counter</button><button id="vAdmin">Admin</button><span id="syncMsg"></span></nav></header>
+<main>
+<div id="viewCount">
+<nav class="tabs no-print" id="tabs" aria-label="Direction pages"></nav>
+<div class="panel"><h2 id="heading"></h2>
+<div class="fields"><label>Direction / approach name<input id="name"></label><label>Location / station<input id="location"></label><label>Observer<input id="observer"></label><label>Survey date<input type="date" id="date"></label></div>
+<div class="actions no-print"><button id="start" class="primary">Start this direction</button><button id="pause">Pause</button><button id="undo">Undo last entry</button><button id="finish" class="primary">Finish this direction</button><button id="resetCounts" class="danger">Reset counts only</button><button id="reset" class="danger">Reset everything</button></div>
+<p id="notice" class="muted" role="status" aria-live="polite"></p>
+<div class="stats"><div>All recorded entries<div class="big" id="total"></div></div><div>Vehicle entries*<div class="big" id="vehicles"></div></div><div>Active time<div class="big" id="clock"></div></div><div>Status<div class="big" id="status"></div></div></div>
+<p class="muted" id="times"></p>
+<p class="muted">*Vehicle entries exclude pedestrians and animal carts. All recorded entries include all 17 categories. Counts are not PCUs.</p></div>
+<h2 class="no-print">Tap the category for each passing vehicle or road user</h2>
+<div class="cards no-print" id="cards"></div>
+<section><h2>Current direction summary</h2><div class="scroll"><table id="summary"></table></div>
+<h2>Current direction time intervals</h2><p class="muted">15-minute intervals follow the device's local clock. Only intervals with entries are shown.</p><div class="scroll"><table id="intervalTable"></table></div>
+<div class="actions no-print"><button id="exportOne" class="primary">Export this direction CSV</button><button id="exportLog">Export all entry logs CSV</button><button id="print">Print / save PDF</button></div></section>
+<section id="textPanel" class="no-print"><h2>Copyable export</h2><p>If your iPhone viewer blocks downloads, select and copy this text.</p><textarea id="exportText" readonly></textarea></section>
+</div>
+
+<div id="viewAdmin" hidden>
+<section id="lockBox"><h2>Admin locked</h2><p class="muted">Enter the admin PIN to view the data.</p>
+<div class="actions"><input type="password" id="pin" inputmode="numeric" autocomplete="off" placeholder="PIN" style="width:auto"><button id="unlock" class="primary">Unlock</button></div>
+<p id="pinMsg" class="muted"></p></section>
+<div id="adminBody" hidden>
+<section><div class="actions"><input type="file" id="afile" multiple accept=".csv" style="width:auto"><button id="arefresh">Refresh now</button><button id="aremove" class="danger">Remove CSV imports</button><button id="lock">Lock admin</button></div>
+<p id="anotice" class="muted"></p></section>
+<div id="aout"></div>
+</div>
+</div>
+</main>
+
+<script>
+'use strict';
+/* ===== CONFIGURE THESE ===== */
+const SB_URL='https://sqtyfcieqznamtcdcadj.supabase.co';
+const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNxdHlmY2llcXpuYW10Y2RjYWRqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI1NDE3OTgsImV4cCI6MjEwODExNzc5OH0.i7b0OUkJOpSWiCwcSLonIlwh3QjwsFGtHy5TDizre9s';
+const SB_OK=!SB_URL.includes('YOUR-PROJECT');
+/* SHA-256 hash of the admin PIN (see setup notes). Leave empty to keep admin locked. */
+const ADMIN_PIN_HASH='f7e330035a23a62c0517c069de26359f68fe078e89862086e5adb1a21f9ac25b';
+
+const CATS=["Cars","Pickup 4WD","Smallbus <25 Seats","Large Bus>25 Seats","Light Goods Vehicle (LGV)- 2 axle < 3 ton","Medium Goods Vehicle (MGV)- 2 axle > 3 ton","Heavy Goods Vehicle (HGV)-","Very heavy Goods Vehicle (VHGV) > 3 - axle","Very Heavy Goods Vehicle (VHGV) > 4 - axle","Trailer 2 axle","Trailer 3 axle","Trailer 4 axle","Tractor","Motorcycles","Bicycles","Animal cart","Pedestrians"];
+const $=i=>document.getElementById(i);
+const pad=n=>String(n).padStart(2,'0');
+const esc=t=>String(t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const sum=a=>a.reduce((x,y)=>x+y,0);
+const rid=()=>Math.random().toString(36).slice(2,10)+Date.now().toString(36);
+const KEY='four-direction-traffic-v1',INTERVAL_MIN=15,fields=['name','location','observer','date'];
+
+async function sb(path,opt={}){
+  const r=await fetch(SB_URL+'/rest/v1/'+path,{...opt,headers:{apikey:SB_KEY,Authorization:'Bearer '+SB_KEY,'Content-Type':'application/json',...(opt.headers||{})}});
+  if(!r.ok)throw new Error('HTTP '+r.status);
+  const t=await r.text();return t?JSON.parse(t):null;
+}
+const UPSERT={method:'POST',headers:{Prefer:'resolution=merge-duplicates'}};
+
+/* ================= COUNTER ================= */
+function today(){let d=new Date();return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())}
+function fresh(i){return {uid:rid(),name:'Direction '+(i+1),location:'',observer:'',date:today(),interval:'15',status:'Ready',start:null,end:null,ms:0,events:[]}}
+let app={version:1,active:0,directions:[0,1,2,3].map(fresh)},anchors=[null,null,null,null],storage=true;
+function valid(x){return x&&x.version===1&&Number.isInteger(x.active)&&x.active>=0&&x.active<4&&Array.isArray(x.directions)&&x.directions.length===4&&x.directions.every(d=>d&&fields.every(f=>typeof d[f]==='string')&&['Ready','Counting','Paused','Finished'].includes(d.status)&&Number.isFinite(d.ms)&&d.ms>=0&&Array.isArray(d.events)&&d.events.every(e=>Number.isInteger(e.category)&&e.category>=0&&e.category<17&&Number.isFinite(e.time)))}
+try{let old=JSON.parse(localStorage.getItem(KEY));if(valid(old))app=old}catch(e){storage=false}
+app.directions.forEach(d=>{d.uid=d.uid||rid();d.interval='15';if(d.status==='Counting')d.status='Paused'});
+function current(){return app.directions[app.active]}
+function persist(){try{localStorage.setItem(KEY,JSON.stringify(app))}catch(e){storage=false;$('notice').textContent='Browser storage unavailable. Export or copy results before closing.'}}
+function checkpoint(){const now=Date.now();app.directions.forEach((d,i)=>{if(d.status==='Counting'&&anchors[i]!==null){d.ms+=Math.max(0,now-anchors[i]);anchors[i]=now}});persist()}
+function stamp(t){return t?new Date(t).toLocaleString():'—'}
+function duration(d,i){let secs=Math.floor((d.ms+(anchors[i]===null?0:Math.max(0,Date.now()-anchors[i])))/1000);return [Math.floor(secs/3600),Math.floor(secs/60)%60,secs%60].map(pad).join(':')}
+function counts(d){let a=CATS.map(()=>0);d.events.forEach(e=>a[e.category]++);return a}
+function vehicleTotal(a){return a.reduce((s,v,i)=>s+(i<15?v:0),0)}
+function intervals(d){let b=new Map();d.events.forEach(e=>{let date=new Date(e.time);date.setMinutes(Math.floor(date.getMinutes()/INTERVAL_MIN)*INTERVAL_MIN,0,0);let t=date.getTime();if(!b.has(t))b.set(t,CATS.map(()=>0));b.get(t)[e.category]++});return [...b].sort((a,b)=>a[0]-b[0])}
+function ctable(rows){return rows.map((row,i)=>'<tr>'+row.map(v=>'<'+(i===0?'th':'td')+'>'+esc(v)+'</'+(i===0?'th':'td')+'>').join('')+'</tr>').join('')}
+function fill(){let d=current();fields.forEach(f=>$(f).value=d[f])}
+function undoCat(i){let d=current();const idx=d.events.map(e=>e.category).lastIndexOf(i);if(idx<0)return;d.events.splice(idx,1);checkpoint();render();quickSync();$('notice').textContent='Removed last '+CATS[i]+' entry from this direction.'}
+function render(){
+  let d=current(),c=counts(d),n=d.events.length;
+  $('tabs').innerHTML='';
+  app.directions.forEach((x,i)=>{let b=document.createElement('button');b.textContent=x.name+' · '+x.events.length;b.className=i===app.active?'selected':'';b.setAttribute('aria-pressed',i===app.active?'true':'false');b.onclick=()=>{checkpoint();app.active=i;persist();fill();render();$('notice').textContent=''};$('tabs').appendChild(b)});
+  $('heading').textContent=d.name;$('total').textContent=n;$('vehicles').textContent=vehicleTotal(c);$('status').textContent=d.status;$('clock').textContent=duration(d,app.active);
+  $('times').textContent='Started: '+stamp(d.start)+' | Finished: '+stamp(d.end);
+  fields.forEach(f=>$(f).disabled=d.status!=='Ready');
+  $('start').disabled=d.status!=='Ready';
+  $('pause').disabled=!['Counting','Paused'].includes(d.status);$('pause').textContent=d.status==='Paused'?'Resume':'Pause';
+  $('undo').disabled=!n||d.status==='Finished';
+  $('finish').disabled=!['Counting','Paused'].includes(d.status);
+  $('cards').innerHTML='';
+  CATS.forEach((cat,i)=>{
+    let w=document.createElement('div');w.className='cell';
+    let b=document.createElement('button');b.className='card';b.disabled=d.status!=='Counting';
+    b.innerHTML='<span class="count">'+c[i]+'</span>'+esc(cat);
+    b.onclick=()=>{if(current().status!=='Counting')return;current().events.push({category:i,time:Date.now()});checkpoint();render();quickSync()};
+    let u=document.createElement('button');u.className='cellundo';u.textContent='↶';u.title='Undo last '+cat;u.setAttribute('aria-label','Undo last '+cat);u.disabled=!c[i]||d.status==='Finished';
+    u.onclick=e=>{e.stopPropagation();undoCat(i)};
+    w.append(b,u);$('cards').appendChild(w);
+  });
+  $('summary').innerHTML=ctable([['Category','Count','Share of all entries (%)'],...CATS.map((cat,i)=>[cat,c[i],(n?100*c[i]/n:0).toFixed(1)]),['ALL RECORDED ENTRIES',n,n?'100.0':'0.0']]);
+  $('intervalTable').innerHTML=ctable([['Interval start',...CATS,'Total'],...intervals(d).map(([t,a])=>[stamp(t),...a,sum(a)])]);
+}
+fields.forEach(f=>$(f).onchange=()=>{current()[f]=$(f).value.trim();if(f==='name'&&!current().name){current().name='Direction '+(app.active+1);$('name').value=current().name}persist();render();quickSync()});
+$('start').onclick=()=>{let d=current();if(!d.date){$('notice').textContent='Enter a survey date.';return}d.start=Date.now();d.status='Counting';anchors[app.active]=d.start;persist();render();quickSync();$('notice').textContent='Counting started for '+d.name+'.'};
+$('pause').onclick=()=>{let d=current();checkpoint();if(d.status==='Counting'){anchors[app.active]=null;d.status='Paused'}else{d.status='Counting';anchors[app.active]=Date.now()}persist();render();quickSync()};
+$('undo').onclick=()=>{let e=current().events.pop();checkpoint();render();quickSync();$('notice').textContent='Removed last '+CATS[e.category]+' entry from this direction.'};
+$('finish').onclick=()=>{if(!confirm('Finish and lock '+current().name+'? Other directions will not be affected.'))return;checkpoint();let d=current();d.status='Finished';d.end=Date.now();anchors[app.active]=null;persist();render();quickSync()};
+function dropRemote(id){delete lastPushed[id];if(SB_OK&&id)sb('directions?id=eq.'+encodeURIComponent(id),{method:'DELETE'}).catch(()=>{})}
+$('resetCounts').onclick=()=>{
+  let d=current();
+  if(!confirm('Delete all counts and times for '+d.name+'? Name, location, observer and date will be kept. This cannot be undone. Export first if you need the data.'))return;
+  let keep={name:d.name,location:d.location,observer:d.observer,date:d.date};
+  app.directions[app.active]={...fresh(app.active),...keep,uid:d.uid};
+  anchors[app.active]=null;persist();fill();render();quickSync();
+  $('notice').textContent='Counts cleared for '+keep.name+'. Name, location, observer and date kept.';
+};
+$('reset').onclick=()=>{
+  if(!confirm('Reset EVERYTHING for '+current().name+'? This deletes all counts, times, name, location, observer and date. This cannot be undone. Export first if you need the data.'))return;
+  dropRemote(current().uid);
+  app.directions[app.active]=fresh(app.active);anchors[app.active]=null;persist();fill();render();quickSync();
+  $('notice').textContent='Direction fully reset.';
+};
+function metadata(d,i){return [['Direction page',i+1],...fields.map(f=>[f,d[f]]),['Interval summary','15 minutes'],['Status',d.status],['Started',stamp(d.start)],['Finished',stamp(d.end)],['Active time',duration(d,i)],[]]}
+function directionRows(){let d=current(),c=counts(d),n=d.events.length;return [...metadata(d,app.active),['Category','Count','Share of all entries (%)'],...CATS.map((t,i)=>[t,c[i],(n?100*c[i]/n:0).toFixed(1)]),['ALL RECORDED ENTRIES',n],['VEHICLE ENTRIES (excl. animal carts/pedestrians)',vehicleTotal(c)],[],['Interval start',...CATS,'Total'],...intervals(d).map(([t,a])=>[stamp(t),...a,sum(a)])]}
+function show(text){$('exportText').value=text;$('textPanel').style.display='block'}
+function download(text,name,type){try{let u=URL.createObjectURL(new Blob([text],{type})),a=document.createElement('a');a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),60000)}catch(e){$('notice').textContent='Download blocked. Copy the export text instead.'}}
+function csvOut(rows,name){checkpoint();show(rows.map(r=>r.join('\t')).join('\n'));let text='\ufeff'+rows.map(r=>r.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(',')).join('\r\n');download(text,name,'text/csv;charset=utf-8')}
+$('exportOne').onclick=()=>csvOut(directionRows(),'traffic-direction-'+(app.active+1)+'.csv');
+$('exportLog').onclick=()=>{let events=app.directions.flatMap((d,i)=>d.events.map(e=>({...e,page:i+1,direction:d.name}))).sort((a,b)=>a.time-b.time);csvOut([['Sequence','Direction page','Direction name','Local timestamp','ISO timestamp','Category'],...events.map((e,i)=>[i+1,e.page,e.direction,stamp(e.time),new Date(e.time).toISOString(),CATS[e.category]])],'traffic-all-entry-logs.csv')};
+$('print').onclick=()=>{checkpoint();render();window.print()};
+
+let lastPushed={},syncTimer=null;
+function quickSync(){clearTimeout(syncTimer);syncTimer=setTimeout(syncNow,400)}
+function syncNow(){
+  if(!SB_OK){$('syncMsg').textContent='Local only (Supabase not configured)';return}
+  const changed=app.directions.filter(d=>JSON.stringify(d)!==lastPushed[d.uid]).map(d=>({id:d.uid,data:d,updated_at:new Date().toISOString()}));
+  if(!changed.length)return;
+  const sent={};changed.forEach(r=>sent[r.id]=JSON.stringify(r.data));
+  sb('directions?on_conflict=id',{...UPSERT,body:JSON.stringify(changed)})
+    .then(()=>{Object.assign(lastPushed,sent);$('syncMsg').textContent='Synced '+new Date().toLocaleTimeString()})
+    .catch(()=>{$('syncMsg').textContent='Sync failed; saved on this device, will retry'});
+}
+setInterval(()=>{checkpoint();$('clock').textContent=duration(current(),app.active)},1000);
+setInterval(syncNow,5000);
+document.addEventListener('visibilitychange',()=>{if(document.hidden){checkpoint();syncNow()}});
+window.addEventListener('pagehide',checkpoint);
+
+/* ================= ADMIN (PIN-protected) ================= */
+const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'],DAY=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+let remote=[],lastSigA='',adminUnlocked=false;
+function fmtD(s){const [y,m,d]=s.split(/[- ]/).map(Number);return DAY[new Date(y,m-1,d).getDay()]+' '+pad(d)+' '+MON[m-1]+' '+y}
+function f12(h){return pad(h%12||12)+':00 '+(h<12?'AM':'PM')}
+function lbl(k){const h=+k.slice(11,13);return f12(h)+' – '+f12((h+2)%24)}
+function blockOf(k){const h=+k.slice(11,13);return k.slice(0,11)+pad(h-h%2)+':00'}
+function blocksOf(r){const b={};for(const k in r.bins){const bk=blockOf(k),c=b[bk]||Array(17).fill(0);r.bins[k].forEach((v,i)=>c[i]+=v);b[bk]=c}return b}
+function mergeB(L){const o={};L.forEach(b=>{for(const k in b){const c=o[k]||Array(17).fill(0);b[k].forEach((v,i)=>c[i]+=v);o[k]=c}});return o}
+function totalOf(r){return Object.values(r.bins).reduce((s,c)=>s+sum(c),0)}
+function colOf(r,i){return Object.values(r.bins).reduce((s,c)=>s+c[i],0)}
+function hms(ms){const s=Math.floor((ms||0)/1000);return [Math.floor(s/3600),Math.floor(s/60)%60,s%60].map(pad).join(':')}
+function ms2key(ms,mins){const d=new Date(ms),mi=d.getMinutes();return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+' '+pad(d.getHours())+':'+pad(mi-mi%mins)}
+function toRec(id,d){
+  if(!d||!d.date)return null;
+  const mins=+d.interval||15,bins={};
+  (d.events||[]).forEach(e=>{if(e.category<0||e.category>16)return;const k=ms2key(e.time,mins);(bins[k]=bins[k]||Array(17).fill(0))[e.category]++});
+  if(!Object.keys(bins).length)return null;
+  return {id,observer:d.observer||'(no observer)',name:d.name||'',location:d.location||'',date:d.date,status:d.status||'',
+    started:d.start?new Date(d.start).toLocaleString():(d.startedText||'—'),
+    finished:d.end?new Date(d.end).toLocaleString():(d.finishedText||'—'),
+    active:d.activeText||hms(d.ms),bins};
+}
+function recs(){return remote.map(r=>toRec(r.id,r.data)).filter(Boolean)}
+function atable(head,rows){
+  return '<div class="scroll"><table><thead><tr>'+head.map(x=>'<th>'+esc(x)+'</th>').join('')+'</tr></thead><tbody>'+
+    rows.map(r=>'<tr'+(String(r[0]).startsWith('Total')?' class="tot"':'')+'>'+r.map(x=>'<td'+(typeof x==='number'?' class="n"':'')+'>'+esc(x)+'</td>').join('')+'</tr>').join('')+
+    '</tbody></table></div>'}
+function blockTable(bins,live){
+  const ks=Object.keys(bins).sort();if(!ks.length)return '<p class="muted">No entries.</p>';
+  const last=ks[ks.length-1];
+  const head=['Category',...ks.map(k=>lbl(k)+(live&&k===last?' (in progress)':'')),'Total'];
+  const rows=CATS.map((c,i)=>{const v=ks.map(k=>bins[k][i]);return [c,...v,sum(v)]});
+  rows.push(['Total',...ks.map(()=>''),ks.reduce((s,k)=>s+sum(bins[k]),0)]);
+  return atable(head,rows);
+}
+function adminHtml(rs){
+  if(!rs.length)return '<section><p class="muted">No data yet. Start counting on the Counter tab, or import CSV files above.</p></section>';
+  let h='';
+  [...new Set(rs.map(r=>r.date))].sort().forEach(dt=>{
+    h+='<section><h2>Date: '+esc(fmtD(dt))+'</h2>';
+    [...new Set(rs.filter(r=>r.date===dt).map(r=>r.observer))].sort().forEach(ob=>{
+      const g=rs.filter(r=>r.date===dt&&r.observer===ob).sort((a,b)=>a.name.localeCompare(b.name));
+      const t=g.reduce((s,r)=>s+totalOf(r),0);
+      h+='<details class="obs" data-k="o:'+esc(dt+ob)+'"><summary><span>Observer: '+esc(ob)+'</span><span class="sd">'+g.length+' direction(s) · '+t+' entries</span></summary>';
+      g.forEach(r=>{
+        h+='<details class="dir" data-k="r:'+esc(r.id)+'"><summary><span>'+esc(r.name+' · '+r.location)+'</span><span class="sd">'+totalOf(r)+' entries</span></summary>'+
+           '<p class="muted">Started: '+esc(r.started)+' · Finished: '+esc(r.finished)+' · Active time: '+esc(r.active)+' · Status: '+esc(r.status)+'</p>'+
+           blockTable(blocksOf(r),r.status==='Counting')+'</details>';
+      });
+      h+='<details class="dir" data-k="c:'+esc(dt+ob)+'"><summary><span>Combined – observer '+esc(ob)+' (all directions)</span><span class="sd">'+t+' entries</span></summary>'+
+         blockTable(mergeB(g.map(blocksOf)),g.some(r=>r.status==='Counting'))+'</details></details>';
+    });
+    h+='</section>';
+  });
+  const names=rs.map(r=>r.name+': '+r.location);
+  const grand=rs.reduce((s,r)=>s+totalOf(r),0);
+  const catRows=CATS.map((c,i)=>{const v=rs.map(r=>colOf(r,i));return [c,...v,sum(v)]});
+  catRows.push(['Total',...rs.map(totalOf),grand]);
+  const bl=rs.map(blocksOf);
+  const keys=[...new Set(bl.flatMap(b=>Object.keys(b)))].sort();
+  const blRows=keys.map(k=>{const v=bl.map(b=>b[k]?sum(b[k]):0);return [fmtD(k.slice(0,10))+' · '+lbl(k),...v,sum(v)]});
+  blRows.push(['Total',...rs.map(totalOf),grand]);
+  h+='<section><h2>Final combined summary – all directions</h2><h3>By category</h3>'+atable(['Category',...names,'All directions'],catRows)+
+     '<h3>By 2-hour block</h3>'+atable(['Block',...names,'All directions'],blRows)+
+     '<h3>All directions, categories by block</h3>'+blockTable(mergeB(bl),rs.some(r=>r.status==='Counting'))+'</section>';
+  return h;
+}
+function anote(t){$('anotice').textContent=t}
+function renderAdmin(force){
+  if(!adminUnlocked)return;
+  const sig=JSON.stringify(remote);if(!force&&sig===lastSigA)return;lastSigA=sig;
+  const open=new Set([...document.querySelectorAll('#aout details[open]')].map(d=>d.dataset.k));
+  $('aout').innerHTML=adminHtml(recs());
+  document.querySelectorAll('#aout details').forEach(d=>{if(open.has(d.dataset.k))d.open=true});
+}
+async function pull(){
+  if(!adminUnlocked)return;
+  if(!SB_OK){anote('Supabase is not configured. Set SB_URL and SB_KEY at the top of the script.');return}
+  try{remote=await sb('directions?select=id,data');anote('');renderAdmin(false)}
+  catch(e){anote('Could not load data from Supabase: '+e.message)}
+}
+function mdy(s){const m=/(\d+)\/(\d+)\/(\d+),\s*(\d+):(\d+):\d+\s*(AM|PM)/i.exec(s);if(!m)return null;let h=+m[4]%12;if(/PM/i.test(m[6]))h+=12;return m[3]+'-'+pad(m[1])+'-'+pad(m[2])+' '+pad(h)+':'+pad(m[5])}
+function parseCSV(text){
+  const out=[];let row=[],f='',q=false;
+  for(let i=0;i<text.length;i++){const c=text[i];
+    if(q){if(c==='"'){if(text[i+1]==='"'){f+='"';i++}else q=false}else f+=c}
+    else if(c==='"')q=true;
+    else if(c===','){row.push(f);f=''}
+    else if(c==='\n'||c==='\r'){if(c==='\r'&&text[i+1]==='\n')i++;row.push(f);out.push(row);row=[];f=''}
+    else f+=c}
+  if(f||row.length){row.push(f);out.push(row)}
+  return out.filter(r=>r.length&&(r.length>1||r[0]!==''));
+}
+function csvData(text){
+  const R=parseCSV(text.replace(/^\uFEFF/,''));const m={};let i=0;
+  while(i<R.length&&R[i].length===2){m[R[i][0]]=R[i][1];i++}
+  if(!m.observer||!m.date)throw new Error('not a counter export');
+  const events=[];
+  R.slice(i).forEach(r=>{
+    const k=r.length>2&&mdy(r[0]);if(!k)return;
+    const [dp,tp]=k.split(' ');const [y,mo,da]=dp.split('-').map(Number);const [h,mi]=tp.split(':').map(Number);
+    const t=new Date(y,mo-1,da,h,mi).getTime();
+    r.slice(1,-1).map(Number).forEach((n,cat)=>{for(let j=0;j<n;j++)events.push({category:cat,time:t})});
+  });
+  return {uid:'csv:'+m.observer+':'+m.name+':'+m.date,name:m.name||'',location:m.location||'',observer:m.observer,date:m.date,
+    interval:m.interval||'15',status:m.Status||'Finished',start:null,end:null,ms:0,
+    startedText:m.Started||'',finishedText:m.Finished||'',activeText:m['Active time']||'',events};
+}
+$('afile').onchange=async e=>{
+  const rows=[],bad=[];
+  for(const f of e.target.files){try{const d=csvData(await f.text());rows.push({id:d.uid,data:d,updated_at:new Date().toISOString()})}catch(err){bad.push(f.name)}}
+  e.target.value='';
+  if(rows.length){
+    try{await sb('directions?on_conflict=id',{...UPSERT,body:JSON.stringify(rows)});anote('Imported '+rows.length+' file(s).'+(bad.length?' Could not read: '+bad.join(', '):''))}
+    catch(err){anote('Upload failed: '+err.message)}
+  }else if(bad.length)anote('Could not read: '+bad.join(', '));
+  pull();
+};
+$('aremove').onclick=async()=>{
+  if(!confirm('Delete all rows imported from CSV files? Counter data is not affected.'))return;
+  try{await sb('directions?id=like.'+encodeURIComponent('csv:*'),{method:'DELETE'});anote('CSV imports removed.');pull()}
+  catch(err){anote('Could not remove: '+err.message)}
+};
+$('arefresh').onclick=pull;
+
+async function sha256(t){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(t));return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}
+function showAdmin(){$('lockBox').hidden=adminUnlocked;$('adminBody').hidden=!adminUnlocked}
+async function unlock(){
+  const pin=$('pin').value;$('pin').value='';
+  if(!ADMIN_PIN_HASH){$('pinMsg').textContent='Admin PIN is not set. Add ADMIN_PIN_HASH at the top of the script.';return}
+  if(!pin){$('pinMsg').textContent='Enter the PIN.';return}
+  let h;
+  try{h=await sha256(pin)}catch(e){$('pinMsg').textContent='This page must be opened over https (or localhost) to check the PIN.';return}
+  if(h!==ADMIN_PIN_HASH){$('pinMsg').textContent='Incorrect PIN.';return}
+  adminUnlocked=true;$('pinMsg').textContent='';showAdmin();pull();
+}
+function lockAdmin(){adminUnlocked=false;remote=[];lastSigA='';$('aout').innerHTML='';anote('');showAdmin()}
+$('unlock').onclick=unlock;
+$('pin').onkeydown=e=>{if(e.key==='Enter')unlock()};
+$('lock').onclick=lockAdmin;
+
+/* ================= VIEW SWITCH ================= */
+function setView(v){
+  $('viewCount').hidden=v!=='c';$('viewAdmin').hidden=v!=='a';
+  $('vCount').classList.toggle('vsel',v==='c');$('vAdmin').classList.toggle('vsel',v==='a');
+  if(v==='a'){showAdmin();if(adminUnlocked)pull()}
+}
+$('vCount').onclick=()=>setView('c');
+$('vAdmin').onclick=()=>setView('a');
+setInterval(()=>{if(adminUnlocked&&!$('viewAdmin').hidden)pull()},3000);
+
+/* ================= START ================= */
+fill();persist();render();
+if(!storage)$('notice').textContent='Storage unavailable. Export or copy results before closing.';
+showAdmin();
+syncNow();
 </script></body></html>

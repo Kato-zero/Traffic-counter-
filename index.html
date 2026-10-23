@@ -13,6 +13,7 @@ h2{font-size:22px;font-weight:700;margin:4px 0 10px}
 h2#heading{color:var(--blue)}
 h3{font-size:17px;font-weight:600;margin:16px 0 8px}
 .panel,section{background:var(--card);border-radius:14px;padding:16px;margin:0 0 12px}
+#shiftBox{border:1.5px solid var(--blue)}
 .tabs{display:flex;background:var(--fill);border-radius:9px;padding:2px;gap:2px;margin:4px 0 12px}
 .tabs button{flex:1;min-width:0;border:0;background:transparent;color:var(--blue);border-radius:7px;padding:8px 4px;font-size:13px;font-weight:600;overflow-wrap:anywhere}
 .tabs button.selected{background:var(--blue);color:#fff;box-shadow:none}
@@ -75,6 +76,7 @@ details.dir{margin-left:6px}
 <header class="nav"><h1>Traffic Counter</h1><p>Counter and admin · shared through Supabase</p><nav class="tabs no-print" id="tabs" aria-label="Direction pages"></nav><span id="syncMsg"></span></header>
 <main>
 <div id="viewCount">
+<section id="shiftBox" hidden></section>
 <section><h2 id="heading"></h2>
 <div class="fields"><label>Direction / approach name<input id="name"></label><label>Location / station<input id="location"></label><label>Observer<input id="observer"></label><label>Survey date<input type="date" id="date"></label></div>
 <div class="actions no-print"><button id="start" class="primary">Start</button><button id="pause">Pause</button><button id="undo">Undo last</button><button id="finish" class="primary">Finish</button><button id="resetCounts" class="danger">Reset counts</button><button id="reset" class="danger">Reset all</button></div>
@@ -115,6 +117,8 @@ const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZ
 const SB_OK=!SB_URL.includes('YOUR-PROJECT');
 /* SHA-256 hash of the admin PIN (see setup notes). Leave empty to keep admin locked. */
 const ADMIN_PIN_HASH='f7e330035a23a62c0517c069de26359f68fe078e89862086e5adb1a21f9ac25b';
+/* Taps before this hour (24h clock) are counted with the previous survey date */
+const SHIFT_END_HOUR=5;
 
 const CATS=["Cars","Pickup 4WD","Smallbus <25 Seats","Large Bus>25 Seats","Light Goods Vehicle (LGV)- 2 axle < 3 ton","Medium Goods Vehicle (MGV)- 2 axle > 3 ton","Heavy Goods Vehicle (HGV)-","Very heavy Goods Vehicle (VHGV) > 3 - axle","Very Heavy Goods Vehicle (VHGV) > 4 - axle","Trailer 2 axle","Trailer 3 axle","Trailer 4 axle","Tractor","Motorcycles","Bicycles","Animal cart","Pedestrians"];
 const $=i=>document.getElementById(i);
@@ -135,6 +139,8 @@ const UPSERT={method:'POST',headers:{Prefer:'resolution=merge-duplicates'}};
 function today(){let d=new Date();return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())}
 function fresh(i){return {uid:rid(),name:'Direction '+(i+1),location:'',observer:'',date:today(),interval:'15',status:'Ready',start:null,end:null,ms:0,events:[]}}
 let app={version:1,active:0,directions:[0,1,2,3].map(fresh),archives:[]},anchors=[null,null,null,null],storage=true;
+/* Directions with counts from an earlier date that the user has not yet confirmed (uids) */
+let pendingShift=new Set();
 function valid(x){return x&&x.version===1&&Number.isInteger(x.active)&&x.active>=0&&x.active<4&&Array.isArray(x.directions)&&x.directions.length===4&&x.directions.every(d=>d&&fields.every(f=>typeof d[f]==='string')&&['Ready','Counting','Paused','Finished'].includes(d.status)&&Number.isFinite(d.ms)&&d.ms>=0&&Array.isArray(d.events)&&d.events.every(e=>Number.isInteger(e.category)&&e.category>=0&&e.category<17&&Number.isFinite(e.time)))}
 try{let old=JSON.parse(localStorage.getItem(KEY));if(valid(old))app=old}catch(e){storage=false}
 if(!Array.isArray(app.archives))app.archives=[];
@@ -161,29 +167,56 @@ function ctable(rows){return rows.map((row,i)=>'<tr>'+row.map(v=>'<'+(i===0?'th'
 function fill(){let d=current();fields.forEach(f=>$(f).value=d[f])}
 function undoCat(i){let d=current();const idx=d.events.map(e=>e.category).lastIndexOf(i);if(idx<0)return;d.events.splice(idx,1);checkpoint();render();quickSync();$('notice').textContent='Removed last '+CATS[i]+' entry from this direction.'}
 function render(){
-  let d=current(),c=counts(d),n=d.events.length;
+  let d=current(),c=counts(d),n=d.events.length,blocked=pendingShift.has(d.uid);
   $('tabs').innerHTML='';
   app.directions.forEach((x,i)=>{let b=document.createElement('button');b.textContent=x.name+' · '+x.events.length;b.className=i===app.active?'selected':'';b.setAttribute('aria-pressed',i===app.active?'true':'false');b.onclick=()=>{checkpoint();app.active=i;persist();fill();render();$('notice').textContent=''};$('tabs').appendChild(b)});
-  $('heading').textContent=d.name;$('total').textContent=n;$('vehicles').textContent=vehicleTotal(c);$('status').textContent=d.status;$('clock').textContent=duration(d,app.active);
+  $('heading').textContent=d.name;$('total').textContent=n;$('vehicles').textContent=vehicleTotal(c);$('status').textContent=blocked?'Confirm shift':d.status;$('clock').textContent=duration(d,app.active);
   $('times').textContent='Started: '+stamp(d.start)+' | Finished: '+stamp(d.end);
   fields.forEach(f=>$(f).disabled=d.status!=='Ready');
   $('start').disabled=d.status!=='Ready';
-  $('pause').disabled=!['Counting','Paused'].includes(d.status);$('pause').textContent=d.status==='Paused'?'Resume':'Pause';
+  $('pause').disabled=blocked||!['Counting','Paused'].includes(d.status);$('pause').textContent=d.status==='Paused'?'Resume':'Pause';
   $('undo').disabled=!n||d.status==='Finished';
-  $('finish').disabled=!['Counting','Paused'].includes(d.status);
+  $('finish').disabled=blocked||!['Counting','Paused'].includes(d.status);
   $('cards').innerHTML='';
   CATS.forEach((cat,i)=>{
     let w=document.createElement('div');w.className='cell';
-    let b=document.createElement('button');b.className='card';b.disabled=d.status!=='Counting';
+    let b=document.createElement('button');b.className='card';b.disabled=d.status!=='Counting'||blocked;
     b.innerHTML='<span class="count">'+c[i]+'</span>'+esc(cat);
-    b.onclick=()=>{if(current().status!=='Counting')return;current().events.push({category:i,time:Date.now()});checkpoint();render();quickSync()};
-    let u=document.createElement('button');u.className='cellundo';u.textContent='↶';u.title='Undo last '+cat;u.setAttribute('aria-label','Undo last '+cat);u.disabled=!c[i]||d.status==='Finished';
+    b.onclick=()=>{if(current().status!=='Counting'||pendingShift.has(current().uid))return;current().events.push({category:i,time:Date.now()});checkpoint();render();quickSync()};
+    let u=document.createElement('button');u.className='cellundo';u.textContent='↶';u.title='Undo last '+cat;u.setAttribute('aria-label','Undo last '+cat);u.disabled=!c[i]||d.status==='Finished'||blocked;
     u.onclick=e=>{e.stopPropagation();undoCat(i)};
     w.append(b,u);$('cards').appendChild(w);
   });
   $('summary').innerHTML=ctable([['Category','Count','Share of all entries (%)'],...CATS.map((cat,i)=>[cat,c[i],(n?100*c[i]/n:0).toFixed(1)]),['ALL RECORDED ENTRIES',n,n?'100.0':'0.0']]);
   $('intervalTable').innerHTML=ctable([['Interval start',...CATS,'Total'],...intervals(d).map(([t,a])=>[stamp(t),...a,sum(a)])]);
+  renderShift();
 }
+/* ---- New shift prompt ---- */
+function renderShift(){
+  const box=$('shiftBox');
+  const items=app.directions.map((d,i)=>({d,i})).filter(({d})=>pendingShift.has(d.uid));
+  if(!items.length){box.hidden=true;box.innerHTML='';return}
+  box.hidden=false;
+  box.innerHTML='<h2>Starting a new shift?</h2>'+items.map(({d,i})=>
+    '<p class="muted"><b>'+esc(d.name)+'</b> still has '+d.events.length+' entries from '+esc(fmtD(d.date))+'. Nothing from this direction is saved online until you choose below.</p>'+
+    '<div class="actions"><button class="primary" data-shift="yes" data-i="'+i+'">Yes, new shift</button><button data-shift="no" data-i="'+i+'">No, same shift</button></div>'
+  ).join('');
+}
+$('shiftBox').addEventListener('click',e=>{
+  const b=e.target.closest('button[data-shift]');if(!b)return;
+  const i=+b.dataset.i,d=app.directions[i];
+  if(!d||!pendingShift.has(d.uid))return;
+  if(b.dataset.shift==='yes'){
+    const keep={name:d.name,location:d.location,observer:d.observer};
+    archiveCurrent(i);
+    app.directions[i]={...fresh(i),...keep,date:today()};
+    anchors[i]=null;pendingShift.delete(d.uid);persist();fill();render();quickSync();
+    $('notice').textContent='New shift started for '+keep.name+'. The earlier counts are kept for the admin view.';
+  }else{
+    d.continueFor=today();pendingShift.delete(d.uid);persist();render();quickSync();
+    $('notice').textContent='Continuing the same shift for '+d.name+'.';
+  }
+});
 fields.forEach(f=>$(f).onchange=()=>{current()[f]=$(f).value.trim();if(f==='name'&&!current().name){current().name='Direction '+(app.active+1);$('name').value=current().name}persist();render();quickSync()});
 $('start').onclick=()=>{let d=current();if(!d.date){$('notice').textContent='Enter a survey date.';return}d.start=Date.now();d.status='Counting';anchors[app.active]=d.start;persist();render();quickSync();$('notice').textContent='Counting started for '+d.name+'.'};
 $('pause').onclick=()=>{let d=current();checkpoint();if(d.status==='Counting'){anchors[app.active]=null;d.status='Paused'}else{d.status='Counting';anchors[app.active]=Date.now()}persist();render();quickSync()};
@@ -217,7 +250,7 @@ let lastPushed={},syncTimer=null;
 function quickSync(){clearTimeout(syncTimer);syncTimer=setTimeout(syncNow,400)}
 function syncNow(){
   if(!SB_OK){$('syncMsg').textContent='Local only (Supabase not configured)';return}
-  const changed=app.directions.filter(d=>JSON.stringify(d)!==lastPushed[d.uid]).map(d=>({id:d.uid,data:d,updated_at:new Date().toISOString()}));
+  const changed=app.directions.filter(d=>!pendingShift.has(d.uid)&&JSON.stringify(d)!==lastPushed[d.uid]).map(d=>({id:d.uid,data:d,updated_at:new Date().toISOString()}));
   const arch=app.archives.map(a=>({id:a.id,data:a.data,updated_at:a.archivedAt}));
   const rows=[...changed,...arch];
   if(!rows.length)return;
@@ -254,14 +287,21 @@ function obsField(v){
 }
 function fmtD(s){const [y,m,d]=s.split(/[- ]/).map(Number);return DAY[new Date(y,m-1,d).getDay()]+' '+pad(d)+' '+MON[m-1]+' '+y}
 function f12(h){return pad(h%12||12)+':00 '+(h<12?'AM':'PM')}
-function lbl(k){const h=+k.slice(11,13);return f12(h)+' – '+f12((h+2)%24)}
+/* Block keys can run past midnight (hours 24+), so wrap them for the labels */
+function lbl(k){const h=+k.slice(11,13);return f12(h%24)+' – '+f12((h+2)%24)}
 function blockOf(k){const h=+k.slice(11,13);return k.slice(0,11)+pad(h-h%2)+':00'}
 function blocksOf(r){const b={};for(const k in r.bins){const bk=blockOf(k),c=b[bk]||Array(17).fill(0);r.bins[k].forEach((v,i)=>c[i]+=v);b[bk]=c}return b}
 function mergeB(L){const o={};L.forEach(b=>{for(const k in b){const c=o[k]||Array(17).fill(0);b[k].forEach((v,i)=>c[i]+=v);o[k]=c}});return o}
 function totalOf(r){return Object.values(r.bins).reduce((s,c)=>s+sum(c),0)}
 function colOf(r,i){return Object.values(r.bins).reduce((s,c)=>s+c[i],0)}
 function hms(ms){const s=Math.floor((ms||0)/1000);return [Math.floor(s/3600),Math.floor(s/60)%60,s%60].map(pad).join(':')}
-function ms2key(ms,mins){const d=new Date(ms),mi=d.getMinutes();return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+' '+pad(d.getHours())+':'+pad(mi-mi%mins)}
+/* Entries before SHIFT_END_HOUR belong to the previous survey date, shown as hours 24 and up */
+function ms2key(ms,mins){
+  const d=new Date(ms);let y=d.getFullYear(),mo=d.getMonth()+1,da=d.getDate(),h=d.getHours();
+  const mi=d.getMinutes()-d.getMinutes()%mins;
+  if(h<SHIFT_END_HOUR){const p=new Date(y,mo-1,da-1);y=p.getFullYear();mo=p.getMonth()+1;da=p.getDate();h+=24}
+  return y+'-'+pad(mo)+'-'+pad(da)+' '+pad(h)+':'+pad(mi);
+}
 function toRec(id,d){
   if(!d||!d.date)return null;
   const mins=+d.interval||15,bins={};
@@ -316,7 +356,7 @@ function dateCsvRows(dt){
 }
 function adminHtml(rs){
   if(!rs.length)return '<section><p class="muted">No data yet. Start counting on the Counter tab, or import CSV files above.</p></section>';
-  let h='';
+  let h='<p class="muted" style="margin:0 4px 10px">Entries recorded before '+SHIFT_END_HOUR+':00 AM are counted with the previous survey date.</p>';
   [...new Set(rs.map(r=>r.date))].sort().forEach(dt=>{
     h+='<section><h2>'+esc(fmtD(dt))+'</h2><div class="rowact"><button data-act="date-csv" data-date="'+esc(dt)+'">Download CSV for this date</button></div>';
     [...new Set(rs.filter(r=>r.date===dt).map(r=>r.observer))].sort().forEach(ob=>{
@@ -364,14 +404,21 @@ async function pull(){
 }
 async function patchRow(id,data){await sb('directions?id=eq.'+encodeURIComponent(id),{method:'PATCH',body:JSON.stringify({data,updated_at:new Date().toISOString()})})}
 async function deleteRow(id){await sb('directions?id=eq.'+encodeURIComponent(id),{method:'DELETE'})}
-function dirVals(d){return {...obsInit(d.observer||''),name:d.name||'',location:d.location||'',date:d.date||''}}
+function dirVals(d){return {...obsInit(d.observer||''),name:d.name||'',location:d.location||'',date:d.date||'',mergeTo:''}}
+function mergeField(v,selfId){
+  const opts=remote.filter(x=>x.id!==selfId&&x.data&&x.data.date)
+    .sort((a,b)=>(a.data.date+a.data.observer+a.data.name).localeCompare(b.data.date+b.data.observer+b.data.name))
+    .map(x=>'<option value="'+esc(x.id)+'"'+(x.id===v.mergeTo?' selected':'')+'>'+esc(fmtD(x.data.date)+' · '+(x.data.observer||'(no observer)')+' · '+(x.data.name||'')+(x.data.location?' · '+x.data.location:''))+'</option>').join('');
+  return '<label>Or merge counts into another direction<select data-f="mergeTo"><option value="">Don\'t merge (save changes above)</option>'+opts+'</select></label>'+
+    '<p class="muted">Use this to fix a misspelled direction. All its counts move into the selected direction, and this entry is deleted. Its name, location and observer are not used when merging.</p>';
+}
 function editFields(v,keys){
   const L={name:'Direction name',location:'Location',date:'Survey date'};
   return keys.map(k=>'<label>'+L[k]+'<input'+(k==='date'?' type="date"':'')+' data-f="'+k+'" value="'+esc(v[k]||'')+'"></label>').join('');
 }
 function dirActions(r){
   if(editState&&editState.type==='dir'&&editState.id===r.id)
-    return '<div class="editbox">'+obsField(editState.vals)+editFields(editState.vals,['name','location','date'])+
+    return '<div class="editbox">'+obsField(editState.vals)+editFields(editState.vals,['name','location','date'])+mergeField(editState.vals,r.id)+
       '<div class="actions"><button class="primary" data-act="dir-save">Save</button><button data-act="cancel">Cancel</button></div></div>';
   return '<div class="rowact"><button data-act="dir-edit" data-id="'+esc(r.id)+'">Edit details</button><button class="danger" data-act="dir-del" data-id="'+esc(r.id)+'">Delete</button></div>';
 }
@@ -406,6 +453,21 @@ aout.addEventListener('click',async e=>{
     if(act==='dir-save'){
       const v=editState.vals;const row=remote.find(x=>x.id===editState.id);
       if(!row){anote('That direction no longer exists. Refresh the page.');return}
+      if(v.mergeTo){
+        const tgt=remote.find(x=>x.id===v.mergeTo);
+        if(!tgt){anote('The direction to merge into no longer exists. Refresh the page.');return}
+        const srcName=row.data.name||'this direction',tgtName=tgt.data.name||'the selected direction';
+        if(!confirm('Move all counts from "'+srcName+'" into "'+tgtName+'" and delete "'+srcName+'"?'))return;
+        const starts=[tgt.data.start,row.data.start].filter(x=>typeof x==='number').sort((a,b)=>a-b);
+        const merged={...tgt.data,
+          events:[...(tgt.data.events||[]),...(row.data.events||[])].sort((a,b)=>a.time-b.time),
+          ms:(tgt.data.ms||0)+(row.data.ms||0),
+          start:starts.length?starts[0]:null,
+          activeText:undefined};
+        await patchRow(tgt.id,merged);
+        await deleteRow(row.id);
+        editState=null;anote('Merged into "'+tgtName+'". Duplicate removed.');await pull();renderAdmin(true);return;
+      }
       const newObs=resolveObs(v);
       if(!newObs||!v.date){anote('Observer and survey date are required.');return}
       await patchRow(row.id,{...row.data,observer:newObs,name:(v.name||'').trim(),location:(v.location||'').trim(),date:v.date});
@@ -513,8 +575,10 @@ $('vAdmin').onclick=()=>setView('a');
 setInterval(()=>{if(adminUnlocked&&!$('viewAdmin').hidden)pull()},3000);
 
 /* ================= START ================= */
+/* Directions with counts from an earlier date need a new-shift decision before they sync */
+app.directions.forEach(d=>{if(d.events.length&&d.date!==today()&&d.continueFor!==today())pendingShift.add(d.uid)});
 /* Directions that have not started take the phone's current date on every load or refresh */
-app.directions.forEach(d=>{if(d.status==='Ready')d.date=today()});
+app.directions.forEach(d=>{if(d.status==='Ready'&&!pendingShift.has(d.uid))d.date=today()});
 fill();persist();render();
 if(!storage)$('notice').textContent='Storage unavailable. Export or copy results before closing.';
 showAdmin();
